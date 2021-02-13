@@ -10,7 +10,10 @@ using System.Text;
 using LinqToDB;
 using LinqToDB.Common;
 using LinqToDB.Data;
+using LinqToDB.Data.DbCommandProcessor;
+using LinqToDB.DataProvider.Informix;
 using LinqToDB.Expressions;
+using LinqToDB.Extensions;
 using LinqToDB.Linq;
 using LinqToDB.Mapping;
 using LinqToDB.Reflection;
@@ -24,12 +27,12 @@ using LinqToDB.ServiceModel;
 #endif
 
 using NUnit.Framework;
+using NUnit.Framework.Internal;
 
 namespace Tests
 {
-	using LinqToDB.DataProvider.Informix;
+	using FastExpressionCompiler;
 	using Model;
-	using NUnit.Framework.Internal;
 	using Tools;
 
 	public partial class TestBase
@@ -60,18 +63,18 @@ namespace Tests
 		}
 
 		private const int TRACES_LIMIT = 50000;
-		
+
 		private static string? _baselinesPath;
 
 		static TestBase()
 		{
-			Console.WriteLine("Tests started in {0}...", Environment.CurrentDirectory);
+			TestContext.WriteLine("Tests started in {0}...", Environment.CurrentDirectory);
 
-			Console.WriteLine("CLR Version: {0}...", Environment.Version);
+			TestContext.WriteLine("CLR Version: {0}...", Environment.Version);
 
 			var traceCount = 0;
 
-			DataConnection.TurnTraceSwitchOn(TraceLevel.Info);
+			DataConnection.TurnTraceSwitchOn();
 			DataConnection.WriteTraceLine = (message, name, level) =>
 			{
 				var ctx   = CustomTestContext.Get();
@@ -104,7 +107,7 @@ namespace Tests
 					if (traceCount < TRACES_LIMIT || level == TraceLevel.Error)
 					{
 						ctx.Set(CustomTestContext.LIMITED, true);
-						Console.WriteLine("{0}: {1}", name, message);
+						TestContext.WriteLine("{0}: {1}", name, message);
 						Debug.WriteLine(message, name);
 					}
 
@@ -112,10 +115,10 @@ namespace Tests
 				}
 			};
 
-			//			Configuration.RetryPolicy.Factory = db => new Retry();
+			// Configuration.RetryPolicy.Factory = db => new Retry();
 
 			Configuration.Linq.TraceMapperExpression = false;
-			//			Configuration.Linq.GenerateExpressionTest  = true;
+			// Configuration.Linq.GenerateExpressionTest  = true;
 			var assemblyPath = typeof(TestBase).Assembly.GetPath()!;
 
 #if NET472
@@ -124,13 +127,20 @@ namespace Tests
 				SqlServerTypes.Utilities.LoadNativeAssemblies(assemblyPath);
 			}
 			catch // this can fail during tests discovering with NUnitTestAdapter
-			{ }
+			{
+				// ignore
+			}
 #endif
 
 			Environment.CurrentDirectory = assemblyPath;
 
+			TestExternals.Log($"CurrentDirectory          : {Environment.CurrentDirectory}");
+
 			var dataProvidersJsonFile     = GetFilePath(assemblyPath, @"DataProviders.json")!;
 			var userDataProvidersJsonFile = GetFilePath(assemblyPath, @"UserDataProviders.json")!;
+
+			TestExternals.Log($"dataProvidersJsonFile     : {dataProvidersJsonFile}");
+			TestExternals.Log($"userDataProvidersJsonFile : {userDataProvidersJsonFile}");
 
 			var dataProvidersJson     = File.ReadAllText(dataProvidersJsonFile);
 			var userDataProvidersJson =
@@ -150,24 +160,12 @@ namespace Tests
 #endif
 
 #if AZURE
-			Console.WriteLine("Azure configuration detected.");
+			TestContext.WriteLine("Azure configuration detected.");
 			configName += ".Azure";
 #endif
 			var testSettings = SettingsReader.Deserialize(configName, dataProvidersJson, userDataProvidersJson);
-			var databasePath = Path.GetFullPath(Path.Combine("Database"));
-			var dataPath     = Path.Combine(databasePath, "Data");
 
-			if (Directory.Exists(dataPath))
-				Directory.Delete(dataPath, true);
-
-			Directory.CreateDirectory(dataPath);
-
-			foreach (var file in Directory.GetFiles(databasePath, "*.*"))
-			{
-				var destination = Path.Combine(dataPath, Path.GetFileName(file));
-				Console.WriteLine("{0} => {1}", file, destination);
-				File.Copy(file, destination, true);
-			}
+			CopyDatabases();
 
 			UserProviders  = new HashSet<string>(testSettings.Providers ?? Array<string>.Empty, StringComparer.OrdinalIgnoreCase);
 			SkipCategories = new HashSet<string>(testSettings.Skip      ?? Array<string>.Empty, StringComparer.OrdinalIgnoreCase);
@@ -184,7 +182,8 @@ namespace Tests
 
 			DataConnection.TurnTraceSwitchOn(traceLevel);
 
-			Console.WriteLine("Connection strings:");
+			TestContext.WriteLine("Connection strings:");
+			TestExternals.Log("Connection strings:");
 
 #if !NET472
 			DataConnection.DefaultSettings            = TxtSettings.Instance;
@@ -195,7 +194,7 @@ namespace Tests
 				if (string.IsNullOrWhiteSpace(provider.Value.ConnectionString))
 					throw new InvalidOperationException("ConnectionString should be provided");
 
-				Console.WriteLine($"\tName=\"{provider.Key}\", Provider=\"{provider.Value.Provider}\", ConnectionString=\"{provider.Value.ConnectionString}\"");
+				TestContext.WriteLine($"\tName=\"{provider.Key}\", Provider=\"{provider.Value.Provider}\", ConnectionString=\"{provider.Value.ConnectionString}\"");
 
 				TxtSettings.Instance.AddConnectionString(
 					provider.Key, provider.Value.Provider ?? "", provider.Value.ConnectionString);
@@ -203,7 +202,10 @@ namespace Tests
 #else
 			foreach (var provider in testSettings.Connections)
 			{
-				Console.WriteLine($"\tName=\"{provider.Key}\", Provider=\"{provider.Value.Provider}\", ConnectionString=\"{provider.Value.ConnectionString}\"");
+				var str = $"\tName=\"{provider.Key}\", Provider=\"{provider.Value.Provider}\", ConnectionString=\"{provider.Value.ConnectionString}\"";
+
+				TestContext.WriteLine(str);
+				TestExternals.Log(str);
 
 				DataConnection.AddOrSetConfiguration(
 					provider.Key,
@@ -212,10 +214,14 @@ namespace Tests
 			}
 #endif
 
-			Console.WriteLine("Providers:");
+			TestContext.WriteLine("Providers:");
+			TestExternals.Log("Providers:");
 
 			foreach (var userProvider in UserProviders)
-				Console.WriteLine($"\t{userProvider}");
+			{
+				TestContext.WriteLine($"\t{userProvider}");
+				TestExternals.Log($"\t{userProvider}");
+			}
 
 			DefaultProvider = testSettings.DefaultConfiguration;
 
@@ -248,6 +254,61 @@ namespace Tests
 			}
 		}
 
+		static void CopyDatabases()
+		{
+			var databasePath = Path.GetFullPath("Database");
+			var dataPath     = Path.Combine(databasePath, "Data");
+
+			TestExternals.Log($"Copy databases {databasePath} => {dataPath}");
+
+			if (TestExternals.IsParallelRun && TestExternals.Configuration != null)
+			{
+				try
+				{
+					foreach (var file in Directory.GetFiles(databasePath, "*.*"))
+					{
+						var fileName = Path.GetFileName(file);
+
+						switch (TestExternals.Configuration, fileName)
+						{
+							case ("Access.Data",         "TestData.mdb")       :
+							case ("SqlCe.Data",          "TestData.sdf")       :
+							case ("SQLite.Classic.Data", "TestData.sqlite")    :
+							case ("SQLite.MS.Data",      "TestData.MS.sqlite") :
+							{
+								var destination = Path.Combine(dataPath, Path.GetFileName(file));
+
+								TestExternals.Log($"{file} => {destination}");
+								File.Copy(file, destination, true);
+
+								break;
+							}
+						}
+					}
+				}
+				catch (Exception e)
+				{
+					TestExternals.Log(e.ToString());
+					TestContext.WriteLine(e);
+					throw;
+				}
+			}
+			else
+			{
+				if (Directory.Exists(dataPath))
+					Directory.Delete(dataPath, true);
+
+				Directory.CreateDirectory(dataPath);
+
+				foreach (var file in Directory.GetFiles(databasePath, "*.*"))
+				{
+					var destination = Path.Combine(dataPath, Path.GetFileName(file));
+					TestContext.WriteLine("{0} => {1}", file, destination);
+					File.Copy(file, destination, true);
+				}
+			}
+		}
+
 		protected static string? GetFilePath(string basePath, string findFileName)
 		{
 			var fileName = Path.GetFullPath(Path.Combine(basePath, findFileName));
@@ -255,7 +316,7 @@ namespace Tests
 			string? path = basePath;
 			while (!File.Exists(fileName))
 			{
-				Console.WriteLine($"File not found: {fileName}");
+				TestContext.WriteLine($"File not found: {fileName}");
 
 				path = Path.GetDirectoryName(path);
 
@@ -265,16 +326,16 @@ namespace Tests
 				fileName = Path.GetFullPath(Path.Combine(path, findFileName));
 			}
 
-			Console.WriteLine($"Base path found: {fileName}");
+			TestContext.WriteLine($"Base path found: {fileName}");
 
 			return fileName;
 		}
 
 #if NET472
-		const  int          IP        = 22654;
-		static bool         _isHostOpen;
-		static LinqService? _service;
-		static object       _syncRoot = new object();
+		const           int          IP = 22654;
+		static          bool         _isHostOpen;
+		static          LinqService? _service;
+		static readonly object       _syncRoot = new object();
 #endif
 
 		static void OpenHost(MappingSchema? ms)
@@ -287,6 +348,7 @@ namespace Tests
 			}
 
 			ServiceHost host;
+
 			lock (_syncRoot)
 			{
 				if (_isHostOpen)
@@ -295,7 +357,7 @@ namespace Tests
 					return;
 				}
 
-				host        = new ServiceHost(_service = new LinqService(ms) { AllowUpdates = true }, new Uri("net.tcp://localhost:" + IP));
+				host        = new ServiceHost(_service = new LinqService(ms) { AllowUpdates = true }, new Uri("net.tcp://localhost:" + (IP + TestExternals.RunID)));
 				_isHostOpen = true;
 			}
 
@@ -317,11 +379,13 @@ namespace Tests
 				"LinqOverWCF");
 
 			host.Open();
+
+			TestExternals.Log($"host opened, Address : {host.BaseAddresses[0]}");
 #endif
 		}
 
 		public static readonly HashSet<string> UserProviders;
-		public static readonly string? DefaultProvider;
+		public static readonly string?         DefaultProvider;
 		public static readonly HashSet<string> SkipCategories;
 
 		public static readonly List<string> Providers = CustomizationSupport.Interceptor.GetSupportedProviders(new List<string>
@@ -351,6 +415,8 @@ namespace Tests
 			TestProvName.SqlServer2016,
 			ProviderName.SqlServer2017,
 			TestProvName.SqlServer2019,
+			TestProvName.SqlServer2019SequentialAccess,
+			TestProvName.SqlServer2019FastExpressionCompiler,
 			ProviderName.SqlServer2000,
 			ProviderName.SqlServer2005,
 			TestProvName.SqlAzure,
@@ -371,7 +437,7 @@ namespace Tests
 			ProviderName.SapHanaOdbc
 		}).ToList();
 
-		protected ITestDataContext GetDataContext(string configuration, MappingSchema? ms = null)
+		protected ITestDataContext GetDataContext(string configuration, MappingSchema? ms = null, bool testLinqService = true)
 		{
 			if (configuration.EndsWith(".LinqService"))
 			{
@@ -379,14 +445,17 @@ namespace Tests
 				OpenHost(ms);
 
 				var str = configuration.Substring(0, configuration.Length - ".LinqService".Length);
-				var dx  = new TestServiceModelDataContext(IP) { Configuration = str };
+
+				var dx  = testLinqService
+					? new ServiceModel.TestLinqServiceDataContext(new LinqService(ms) { AllowUpdates = true }) { Configuration = str }
+					: new TestServiceModelDataContext(IP + TestExternals.RunID) { Configuration = str } as RemoteDataContextBase;
 
 				Debug.WriteLine(((IDataContext)dx).ContextID, "Provider ");
 
 				if (ms != null)
 					dx.MappingSchema = new MappingSchema(dx.MappingSchema, ms);
 
-				return dx;
+				return (ITestDataContext)dx;
 #else
 				configuration = configuration.Substring(0, configuration.Length - ".LinqService".Length);
 #endif
@@ -397,8 +466,19 @@ namespace Tests
 			var res = new TestDataConnection(configuration);
 			if (ms != null)
 				res.AddMappingSchema(ms);
+
+			// add extra mapping schema to not share mappers with other sql2017/2019 providers
+			// use same schema to use cache within test provider scope
+			if (configuration == TestProvName.SqlServer2019SequentialAccess)
+				res.AddMappingSchema(_sequentialAccessSchema);
+			else if (configuration == TestProvName.SqlServer2019FastExpressionCompiler)
+				res.AddMappingSchema(_fecSchema);
+
 			return res;
 		}
+
+		private static readonly MappingSchema _sequentialAccessSchema = new MappingSchema();
+		private static readonly MappingSchema _fecSchema = new MappingSchema();
 
 		protected static char GetParameterToken(string context)
 		{
@@ -545,7 +625,6 @@ namespace Tests
 					using (new DisableLogging())
 					using (var db = new TestDataConnection())
 					{
-						db.Parent.Delete(c => c.ParentID >= 1000);
 						_parent = db.Parent.ToList();
 						db.Close();
 
@@ -625,7 +704,7 @@ namespace Tests
 					.Where(p => p.Value1.HasValue && (new[] { 1, 2 }.Contains(p.Value1.Value)))
 					.Select(p => p.Value1 == 1 ?
 						(ParentInheritanceBase4)new ParentInheritance14 { ParentID = p.ParentID } :
-						(ParentInheritanceBase4)new ParentInheritance24 { ParentID = p.ParentID }
+												new ParentInheritance24 { ParentID = p.ParentID }
 				).ToList();
 
 		protected List<Child>?      _child;
@@ -965,6 +1044,16 @@ namespace Tests
 			return data;
 		}
 
+		protected bool IsCaseSensitiveDB(string context)
+		{
+			// we intentionally configure Sql Server 2019 test database to be case-sensitive to test
+			// linq2db support for this configuration
+			// on CI we test two configurations:
+			// linux/mac: db is case sensitive, catalog is case insensitive
+			// windows: both db and catalog are case sensitive
+			return GetProviderName(context, out var _) == TestProvName.SqlServer2019;
+		}
+
 		protected void AreEqual<T>(IEnumerable<T> expected, IEnumerable<T> result, bool allowEmpty = false)
 		{
 			AreEqual(t => t, expected, result, EqualityComparer<T>.Default, allowEmpty);
@@ -1002,7 +1091,7 @@ namespace Tests
 
 		protected void AreEqual<T>(Func<T, T> fixSelector, IEnumerable<T> expected, IEnumerable<T> result, IEqualityComparer<T> comparer, bool allowEmpty = false)
 		{
-			AreEqual<T>(fixSelector, expected, result, comparer, null, allowEmpty);
+			AreEqual(fixSelector, expected, result, comparer, null, allowEmpty);
 		}
 
 		protected void AreEqual<T>(
@@ -1087,35 +1176,50 @@ namespace Tests
 
 		public T[] AssertQuery<T>(IQueryable<T> query)
 		{
-			var expr = query.Expression;
-
+			var expr    = query.Expression;
+			var loaded  = new Dictionary<Type, Expression>();
+			var actual  = query.ToArray();
 			var newExpr = expr.Transform(e =>
 			{
 				if (e.NodeType == ExpressionType.Call)
 				{
 					var mc = (MethodCallExpression)e;
-					if (mc.IsSameGenericMethod(Methods.LinqToDB.GetTable))
+
+					if (typeof(ITable<>).IsSameOrParentOf(mc.Type))
 					{
-						var newCall = LinqToDB.Common.TypeHelper.MakeMethodCall(Methods.Queryable.ToArray, mc);
-						newCall     = LinqToDB.Common.TypeHelper.MakeMethodCall(Methods.Enumerable.AsQueryable, newCall);
-						return newCall;
+						var entityType = mc.Method.ReturnType.GetGenericArguments()[0];
+
+						if (entityType != null)
+						{
+							if (!loaded.TryGetValue(entityType, out var itemsExpression))
+							{
+								var newCall = LinqToDB.Common.TypeHelper.MakeMethodCall(Methods.Queryable.ToArray, mc);
+								var items = newCall.EvaluateExpression();
+								itemsExpression = Expression.Constant(items, entityType.MakeArrayType());
+								loaded.Add(entityType, itemsExpression);
+
+							}
+							var queryCall =
+								LinqToDB.Common.TypeHelper.MakeMethodCall(Methods.Enumerable.AsQueryable,
+									itemsExpression);
+							return queryCall;
+						}
 					}
 				}
 
 				return e;
 			})!;
 
-
-			var actual = query.ToArray();
-
 			var empty = LinqToDB.Common.Tools.CreateEmptyQuery<T>();
 			T[]? expected;
+
 			using (new DisableLogging())
 			{
 				expected = empty.Provider.CreateQuery<T>(newExpr).ToArray();
 			}
 
-			AreEqual(expected, actual, ComparerBuilder.GetEqualityComparer<T>());
+			if (actual.Length > 0 || expected.Length > 0)
+				AreEqual(expected, actual, ComparerBuilder.GetEqualityComparer<T>());
 
 			return actual;
 		}
@@ -1124,7 +1228,7 @@ namespace Tests
 		{
 			Assert.AreEqual(normalize(expected), normalize(result));
 
-			string normalize(string sql)
+			static string normalize(string sql)
 			{
 				var lines = sql.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
 				return string.Join("\n", lines.Where(l => !l.StartsWith("-- ")).Select(l => l.TrimStart('\t', ' ')));
@@ -1156,11 +1260,13 @@ namespace Tests
 				case TestProvName.SqlServer2016:
 				case ProviderName.SqlServer2017:
 				case TestProvName.SqlServer2019:
+				case TestProvName.SqlServer2019SequentialAccess:
+				case TestProvName.SqlServer2019FastExpressionCompiler:
 				{
-						if (!tableName.StartsWith("#"))
-							finalTableName = "#" + tableName;
-						break;
-					}
+					if (!tableName.StartsWith("#"))
+						finalTableName = "#" + tableName;
+					break;
+				}
 				default:
 					throw new NotImplementedException();
 			}
@@ -1174,9 +1280,49 @@ namespace Tests
 			return context.Replace(".LinqService", "");
 		}
 
+		[SetUp]
+		public virtual void OnBeforeTest()
+		{
+			// SequentialAccess-enabled provider setup
+			var (provider, _) = NUnitUtils.GetContext(TestExecutionContext.CurrentContext.CurrentTest);
+			if (provider == TestProvName.SqlServer2019SequentialAccess)
+			{
+				Configuration.OptimizeForSequentialAccess = true;
+				DbCommandProcessorExtensions.Instance = new SequentialAccessCommandProcessor();
+			}
+			else if (provider == TestProvName.SqlServer2019FastExpressionCompiler)
+			{
+				//Compilation.SetExpressionCompiler(_ => ExpressionCompiler.CompileFast(_, true));
+			}
+		}
+
 		[TearDown]
 		public virtual void OnAfterTest()
 		{
+			// SequentialAccess-enabled provider cleanup
+			var (provider, _) = NUnitUtils.GetContext(TestExecutionContext.CurrentContext.CurrentTest);
+			if (provider == TestProvName.SqlServer2019SequentialAccess)
+			{
+				Configuration.OptimizeForSequentialAccess = false;
+				DbCommandProcessorExtensions.Instance = null;
+			}
+			if (provider == TestProvName.SqlServer2019FastExpressionCompiler)
+			{
+				//Compilation.SetExpressionCompiler(null);
+			}
+
+			if (provider?.Contains("SapHana") == true)
+			{
+				using (new DisableLogging())
+				using (new DisableBaseline("isn't baseline query"))
+				using (var db = new TestDataConnection(provider))
+				{
+					// release memory
+					db.Execute("ALTER SYSTEM CLEAR SQL PLAN CACHE");
+				}
+			}
+
+			// dump baselines
 			var ctx = CustomTestContext.Get();
 
 			if (_baselinesPath != null)
@@ -1453,6 +1599,56 @@ namespace Tests
 		{
 			Configuration.Linq.CompareNullsAsValues = true;
 			Query.ClearCaches();
+		}
+	}
+
+	public static class TestExternals
+	{
+		public static string? LogFilePath;
+		public static bool    IsParallelRun;
+		public static int     RunID;
+		public static string? Configuration;
+
+		static StreamWriter? _logWriter;
+
+		public static void Log(string text)
+		{
+			if (LogFilePath != null)
+			{
+				if (_logWriter == null)
+					_logWriter = File.CreateText(LogFilePath);
+
+				_logWriter.WriteLine(text);
+				_logWriter.Flush();
+			}
+		}
+	}
+
+	public class CustomCommandProcessor : IDisposable
+	{
+		private readonly IDbCommandProcessor? _original = DbCommandProcessorExtensions.Instance;
+		public CustomCommandProcessor(IDbCommandProcessor? processor)
+		{
+			DbCommandProcessorExtensions.Instance = processor;
+		}
+
+		public void Dispose()
+		{
+			DbCommandProcessorExtensions.Instance = _original;
+		}
+	}
+
+	public class OptimizeForSequentialAccess : IDisposable
+	{
+		private readonly bool _original = Configuration.OptimizeForSequentialAccess;
+		public OptimizeForSequentialAccess(bool enable)
+		{
+			Configuration.OptimizeForSequentialAccess = enable;
+		}
+
+		public void Dispose()
+		{
+			Configuration.OptimizeForSequentialAccess = _original;
 		}
 	}
 }

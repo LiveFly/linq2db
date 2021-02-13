@@ -1,14 +1,14 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Data.Linq;
 using System.Diagnostics;
-using System.Linq;
-using System.Xml;
-using System.Xml.Linq;
 using System.Globalization;
-using System.Collections.Generic;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Text;
+using System.Xml;
+using System.Xml.Linq;
 using LinqToDB;
 using LinqToDB.Common;
 using LinqToDB.Data;
@@ -16,9 +16,7 @@ using LinqToDB.DataProvider;
 using LinqToDB.DataProvider.Oracle;
 using LinqToDB.Mapping;
 using LinqToDB.Tools;
-
 using NUnit.Framework;
-
 using Oracle.ManagedDataAccess.Client;
 using Oracle.ManagedDataAccess.Types;
 
@@ -29,6 +27,7 @@ namespace Tests.DataProvider
 	using System.Threading.Tasks;
 	using LinqToDB.Data.RetryPolicy;
 	using LinqToDB.Linq;
+	using LinqToDB.Linq.Internal;
 	using LinqToDB.SchemaProvider;
 	using Model;
 
@@ -85,7 +84,7 @@ namespace Tests.DataProvider
 			if (throwException)
 			{
 				if (!EqualityComparer<T>.Default.Equals((T)actualValue, (T)expectedValue))
-					throw new Exception($"Expected: {expectedValue} But was: {actualValue}");
+					throw new AssertionException($"Expected: {expectedValue} But was: {actualValue}");
 			}
 			else
 			{
@@ -419,8 +418,8 @@ namespace Tests.DataProvider
 				Assert.That(conn.Execute<byte[]>(PathThroughSql, DataParameter.Binary   ("p", arr1)), Is.EqualTo(arr1));
 				Assert.That(conn.Execute<byte[]>(PathThroughSql, DataParameter.VarBinary("p", arr1)), Is.EqualTo(arr1));
 				Assert.That(conn.Execute<byte[]>(PathThroughSql, DataParameter.Create   ("p", arr1)), Is.EqualTo(arr1));
-				Assert.That(conn.Execute<byte[]>(PathThroughSql, DataParameter.VarBinary("p", new byte[0])), Is.EqualTo(new byte[0]));
-				Assert.That(conn.Execute<byte[]>(PathThroughSql, DataParameter.Image    ("p", new byte[0])), Is.EqualTo(new byte[0]));
+				Assert.That(conn.Execute<byte[]>(PathThroughSql, DataParameter.VarBinary("p", Array<byte>.Empty)), Is.EqualTo(Array<byte>.Empty));
+				Assert.That(conn.Execute<byte[]>(PathThroughSql, DataParameter.Image    ("p", Array<byte>.Empty)), Is.EqualTo(Array<byte>.Empty));
 				Assert.That(conn.Execute<byte[]>(PathThroughSql, new DataParameter { Name = "p", Value = arr1 }), Is.EqualTo(arr1));
 				Assert.That(conn.Execute<byte[]>(PathThroughSql, DataParameter.Create   ("p", new Binary(arr1))), Is.EqualTo(arr1));
 				Assert.That(conn.Execute<byte[]>(PathThroughSql, new DataParameter("p", new Binary(arr1))), Is.EqualTo(arr1));
@@ -695,6 +694,8 @@ namespace Tests.DataProvider
 		[Test]
 		public void NVarchar2InsertTest([IncludeDataSources(TestProvName.AllOracle)] string context)
 		{
+			ResetAllTypesIdentity(context);
+
 			using (var db = new DataConnection(context))
 			using (db.BeginTransaction())
 			{
@@ -720,6 +721,8 @@ namespace Tests.DataProvider
 		[Test]
 		public void NVarchar2UpdateTest([IncludeDataSources(TestProvName.AllOracle)] string context)
 		{
+			ResetAllTypesIdentity(context);
+
 			using (var db = new DataConnection(context))
 			using (db.BeginTransaction())
 			{
@@ -2165,30 +2168,30 @@ namespace Tests.DataProvider
 		[Test]
 		public void OverflowTest([IncludeDataSources(TestProvName.AllOracle)] string context)
 		{
-			var func = OracleTools.DataReaderGetDecimal;
-			try
-			{
-				OracleTools.DataReaderGetDecimal = GetDecimal;
+			OracleDataProvider provider;
 
-				using (var db = new DataConnection(context))
-				{
-					var list = db.GetTable<DecimalOverflow>().ToList();
-				}
-			}
-			finally
+			using (var db = new DataConnection(context))
 			{
-				OracleTools.DataReaderGetDecimal = func;
+				provider = new OracleDataProvider(db.DataProvider.Name, ((OracleDataProvider)db.DataProvider).Version);
+			}
+
+			provider.ReaderExpressions[new ReaderInfo { FieldType = typeof(decimal) }] = (Expression<Func<IDataReader, int, decimal>>)((r,i) => GetDecimal(r, i));
+
+			using (var db = new DataConnection(provider, DataConnection.GetConnectionString(context)))
+			{
+				var list = db.GetTable<DecimalOverflow>().ToList();
 			}
 		}
 
 		const int ClrPrecision = 29;
 
+		[ColumnReader(1)]
 		static decimal GetDecimal(IDataReader rd, int idx)
 		{
 			if (rd is Oracle.ManagedDataAccess.Client.OracleDataReader reader)
 			{
 				var value  = reader.GetOracleDecimal(idx);
-				var newval = Oracle.ManagedDataAccess.Types.OracleDecimal.SetPrecision(value, value > 0 ? ClrPrecision : (ClrPrecision - 1));
+				var newval = OracleDecimal.SetPrecision(value, value > 0 ? ClrPrecision : (ClrPrecision - 1));
 
 				return newval.Value;
 			}
@@ -2212,20 +2215,9 @@ namespace Tests.DataProvider
 		[Test]
 		public void OverflowTest2([IncludeDataSources(TestProvName.AllOracleManaged)] string context)
 		{
-			var func = OracleTools.DataReaderGetDecimal;
-			try
+			using (var db = new DataConnection(context))
 			{
-
-				OracleTools.DataReaderGetDecimal = (rd, idx) => { throw new Exception(); };
-
-				using (var db = new DataConnection(context))
-				{
-					var list = db.GetTable<DecimalOverflow2>().ToList();
-				}
-			}
-			finally
-			{
-				OracleTools.DataReaderGetDecimal = func;
+				var list = db.GetTable<DecimalOverflow2>().ToList();
 			}
 		}
 
@@ -2574,6 +2566,8 @@ namespace Tests.DataProvider
 		[Test]
 		public void Issue539([IncludeDataSources(TestProvName.AllOracle)] string context)
 		{
+			ResetAllTypesIdentity(context);
+
 			using (var db = GetDataContext(context))
 			{
 				var n = 0;
@@ -3051,7 +3045,8 @@ namespace Tests.DataProvider
 					Assert.That(pms[15].Value,
 						Is.EqualTo(new DateTimeOffset(2012, 12, 12, 11, 12, 12, isNative ? 0 : 12, TimeSpan.Zero)).
 						Or.EqualTo(new DateTimeOffset(2012, 12, 12, 11, 12, 12, isNative ? 0 : 12, TestData.DateTimeOffset.Offset)).
-						Or.EqualTo(new DateTimeOffset(2012, 12, 12, 12, 12, 12, isNative ? 0 : 12, TestData.DateTimeOffset.Offset.Add(new TimeSpan(-1, 0, 0)))));
+						Or.EqualTo(new DateTimeOffset(2012, 12, 12, 12, 12, 12, isNative ? 0 : 12, TestData.DateTimeOffset.Offset.Add(new TimeSpan(-1, 0, 0)))).
+						Or.EqualTo(new DateTimeOffset(2012, 12, 12, 12, 12, 12, isNative ? 0 : 12, new TimeSpan(-5, 0, 0))));
 
 				Assert.AreEqual("1"                   , pms[16].Value);
 				Assert.IsNull(pms[17].Value);
@@ -3124,6 +3119,8 @@ namespace Tests.DataProvider
 		[Test]
 		public void LongDataTypeTest([IncludeDataSources(false, TestProvName.AllOracle)] string context)
 		{
+			ResetAllTypesIdentity(context);
+
 			using (var db = GetDataContext(context))
 			{
 				db.GetTable<AllTypes>()
@@ -3736,9 +3733,8 @@ namespace Tests.DataProvider
 		public async Task Issue2504Test([IncludeDataSources(false, TestProvName.AllOracle)] string context)
 		{
 			using (var db = new TestDataConnection(context))
-			using (db.BeginTransaction())
 			{
-				db.Execute("CREATE SEQUENCE SEQ_A");
+				db.Execute("CREATE SEQUENCE SEQ_A START WITH 1 MINVALUE 0");
 				try
 				{
 					db.Execute(@"
@@ -3749,7 +3745,7 @@ CREATE TABLE ""TABLE_A""(
 	CONSTRAINT ""PK_TABLE_A"" PRIMARY KEY(""COLUMN_A"", ""COLUMN_B"", ""COLUMN_C"")
 )");
 
-					var id = await db.InsertWithInt64IdentityAsync(new Issue2504Table1()
+					var id = await db.InsertWithInt64IdentityAsync(new Issue2504Table1
 					{
 						COLUMNA = 1,
 						COLUMNB = 2
@@ -3767,8 +3763,8 @@ CREATE TABLE ""TABLE_A""(
 				}
 				finally
 				{
-					db.Execute("DROP SEQUENCE SEQ_A");
-					db.Execute("DROP TABLE \"TABLE_A\"");
+					try { db.Execute("DROP SEQUENCE SEQ_A"); } catch { }
+					try { db.Execute("DROP TABLE \"TABLE_A\""); } catch { }
 				}
 			}
 		}
@@ -3805,5 +3801,19 @@ CREATE TABLE ""TABLE_A""(
 			public int COLUMNC { get; set; }
 		}
 		#endregion
+
+		[Test]
+		public void TestDateTimeNAddTimeSpan([IncludeDataSources(true, TestProvName.AllOracle)] string context)
+		{
+			var ts = TimeSpan.FromHours(1);
+
+			using (var db = GetDataContext(context))
+			{
+				db.GetTable<AllTypes>()
+					.Where(_ =>
+						 Sql.CurrentTimestamp > _.datetime2DataType + TimeSpan.FromHours(1)
+					).Select(x => x.ID).ToArray();
+			}
+		}
 	}
 }

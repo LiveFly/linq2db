@@ -4,7 +4,7 @@ using System.Text;
 namespace LinqToDB.DataProvider.Informix
 {
 	using System.Globalization;
-	using LinqToDB.Common;
+	using Common;
 	using Mapping;
 	using SqlQuery;
 
@@ -20,7 +20,7 @@ namespace LinqToDB.DataProvider.Informix
 		{
 			ColumnNameComparer = StringComparer.OrdinalIgnoreCase;
 
-			SetValueToSqlConverter(typeof(bool), (sb,dt,v) => sb.Append("'").Append((bool)v ? 't' : 'f').Append("'"));
+			SetValueToSqlConverter(typeof(bool), (sb,dt,v) => sb.Append('\'').Append((bool)v ? 't' : 'f').Append('\''));
 
 			SetDataType(typeof(string), new SqlDataType(DataType.NVarChar, typeof(string), 255));
 
@@ -52,7 +52,7 @@ namespace LinqToDB.DataProvider.Informix
 			stringBuilder
 				.Append("chr(")
 				.Append(value)
-				.Append(")")
+				.Append(')')
 				;
 		}
 
@@ -81,7 +81,7 @@ namespace LinqToDB.DataProvider.Informix
 			// without generation of range-specific literals
 			// see Issue1307Tests tests
 			string format;
-			if (value.Millisecond != 0)
+			if ((value.Ticks % 10000000) / 100 != 0)
 				format = InformixConfiguration.ExplicitFractionalSecondsSeparator ?
 					"TO_DATE('{0:yyyy-MM-dd HH:mm:ss.fffff}', '%Y-%m-%d %H:%M:%S.%F5')" :
 					"TO_DATE('{0:yyyy-MM-dd HH:mm:ss.fffff}', '%Y-%m-%d %H:%M:%S%F5')";

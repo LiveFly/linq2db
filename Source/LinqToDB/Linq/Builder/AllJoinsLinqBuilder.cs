@@ -45,7 +45,7 @@ namespace LinqToDB.Linq.Builder
 						SqlJoinType.Left  => JoinType.Left,
 						SqlJoinType.Right => JoinType.Right,
 						SqlJoinType.Full  => JoinType.Full,
-						_                 => throw new ArgumentOutOfRangeException(),
+						_                 => throw new InvalidOperationException($"Unexpected join type: {(SqlJoinType)methodCall.Arguments[2].EvaluateExpression()!}")
 					};
 					break;
 			}
@@ -87,8 +87,7 @@ namespace LinqToDB.Linq.Builder
 				builder.BuildSearchCondition(
 					joinContext, 
 					conditionExpr,
-					join.JoinedTable.Condition.Conditions,
-					false);
+					@join.JoinedTable.Condition.Conditions);
 			}
 			else
 			{

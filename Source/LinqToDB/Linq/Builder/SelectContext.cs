@@ -465,19 +465,7 @@ namespace LinqToDB.Linq.Builder
 		SqlInfo[] ConvertExpressions(Expression expression, ConvertFlags flags, ColumnDescriptor? columnDescriptor)
 		{
 			return Builder.ConvertExpressions(this, expression, flags, columnDescriptor)
-				.Select (CheckExpression)
 				.ToArray();
-		}
-
-		SqlInfo CheckExpression(SqlInfo expression)
-		{
-			if (expression.Sql is SqlSearchCondition)
-			{
-				expression = expression.WithSql(Builder.Convert(
-					new SqlFunction(typeof(bool), "CASE", expression.Sql, new SqlValue(true), new SqlValue(false))));
-			}
-
-			return expression;
 		}
 
 		#endregion
@@ -1016,20 +1004,7 @@ namespace LinqToDB.Linq.Builder
 
 		public virtual void CompleteColumns()
 		{
-			if (SelectQuery.Select.Columns.Count == 0)
-			{
-				var sql = ConvertToSql(null, 0, ConvertFlags.All);
-				if (sql.Length > 0)
-				{
-					// Handling case when all columns are aggregates, it cause query to produce only single record and we have to include at least one aggregation in Select statement.
-					// 
-					var allAggregate = sql.All(s => QueryHelper.IsAggregationFunction(s.Sql));
-					if (allAggregate)
-					{
-						SelectQuery.Select.Add(sql[0].Sql);
-					}
-				}
-			}
+			ExpressionBuilder.EnsureAggregateColumns(this, SelectQuery);
 
 			foreach (var sequence in Sequence)
 			{
@@ -1270,6 +1245,9 @@ namespace LinqToDB.Linq.Builder
 				if (typeof(IGrouping<,>).IsSameOrParentOf(me.Member.DeclaringType!) && memberExpression.Type == expression.Type)
 					return memberExpression;
 			}
+
+			if (!memberExpression.Type.IsAssignableFrom(levelExpression.Type))
+				return memberExpression;
 
 			return !ReferenceEquals(levelExpression, expression) ?
 				expression.Transform(ex => ReferenceEquals(ex, levelExpression) ? memberExpression : ex) :

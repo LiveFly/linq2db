@@ -137,7 +137,7 @@ namespace Tests.Data
 		[Test]
 		public void TestObjectProjection([DataSources(false)] string context)
 		{
-			using (var conn = new TestDataConnection(context))
+			using (var conn = GetDataContext(context))
 			{
 				var result = conn.Person.Where(p => p.ID == 1).Select(p => new { p.ID, p.Name })
 					.Take(1)
@@ -156,7 +156,7 @@ namespace Tests.Data
 		{
 			using (var conn = GetDataContext(context))
 			{
-				var result = 
+				var result =
 					from p in conn.Person
 					from pp in conn.Person.LeftJoin(pp => pp.ID + 1 == p.ID)
 					select new { p.ID, pp.Name };

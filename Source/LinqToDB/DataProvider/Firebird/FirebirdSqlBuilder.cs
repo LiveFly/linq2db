@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Data;
 using System.Linq;
+using System.Text;
 
 #region ReSharper disable
 // ReSharper disable SuggestUseVarKeywordEverywhere
@@ -13,7 +14,6 @@ namespace LinqToDB.DataProvider.Firebird
 	using Mapping;
 	using SqlQuery;
 	using SqlProvider;
-	using System.Text;
 
 	public partial class FirebirdSqlBuilder : BasicSqlBuilder
 	{
@@ -83,7 +83,7 @@ namespace LinqToDB.DataProvider.Firebird
 				throw new SqlException("Identity field must be defined for '{0}'.", insertClause.Into.Name);
 
 			AppendIndent().AppendLine("RETURNING");
-			AppendIndent().Append("\t");
+			AppendIndent().Append('\t');
 			BuildExpression(identityField, false, true);
 		}
 
@@ -93,12 +93,6 @@ namespace LinqToDB.DataProvider.Firebird
 				return new SqlExpression("GEN_ID(" + ConvertInline(table.SequenceAttributes[0].SequenceName, ConvertType.SequenceName) + ", 1)", Precedence.Primary);
 
 			return base.GetIdentityExpression(table);
-		}
-
-		protected override void BuildFunction(SqlFunction func)
-		{
-			func = ConvertFunctionParameters(func);
-			base.BuildFunction(func);
 		}
 
 		protected override void BuildDataTypeFromDataType(SqlDataType type, bool forCreateTable)
@@ -139,27 +133,6 @@ namespace LinqToDB.DataProvider.Firebird
 		protected sealed override bool IsReserved(string word)
 		{
 			return ReservedWords.IsReserved(word, ProviderName.Firebird);
-		}
-
-		protected override void BuildColumnExpression(SelectQuery? selectQuery, ISqlExpression expr, string? alias, ref bool addAlias)
-		{
-			var wrap = false;
-
-			if (expr.SystemType == typeof(bool))
-			{
-				if (expr is SqlSearchCondition)
-					wrap = true;
-				else
-					wrap =
-						expr is SqlExpression ex      &&
-						ex.Expr              == "{0}" &&
-						ex.Parameters.Length == 1     &&
-						ex.Parameters[0] is SqlSearchCondition;
-			}
-
-			if (wrap) StringBuilder.Append("CASE WHEN ");
-			base.BuildColumnExpression(selectQuery, expr, alias, ref addAlias);
-			if (wrap) StringBuilder.Append(" THEN 1 ELSE 0 END");
 		}
 
 		/// <summary>
@@ -235,7 +208,7 @@ namespace LinqToDB.DataProvider.Firebird
 
 		protected override void BuildDropTableStatement(SqlDropTableStatement dropTable)
 		{
-			var identityField = dropTable.Table!.IdentityFields.FirstOrDefault();
+			var identityField = dropTable.Table!.IdentityFields.Count > 0 ? dropTable.Table!.IdentityFields[0] : null;
 
 			if (identityField == null && dropTable.Table.TableOptions.HasDropIfExists() == false && dropTable.Table.TableOptions.HasIsTemporary() == false)
 			{
@@ -290,7 +263,7 @@ namespace LinqToDB.DataProvider.Firebird
 				dropCommand
 					.Append("DROP ")
 					.Append(objectName)
-					.Append(" ");
+					.Append(' ');
 
 				Convert(dropCommand, identifier, ConvertType.NameToQueryTable);
 
@@ -392,7 +365,7 @@ namespace LinqToDB.DataProvider.Firebird
 		{
 			if (createTable.StatementHeader == null)
 			{
-				_identityField = createTable.Table!.IdentityFields.FirstOrDefault();
+				_identityField = createTable.Table!.IdentityFields.Count > 0 ? createTable.Table!.IdentityFields[0] : null;
 
 				var checkExistence = createTable.Table.TableOptions.HasCreateIfNotExists() || createTable.Table.TableOptions.HasIsTemporary();
 

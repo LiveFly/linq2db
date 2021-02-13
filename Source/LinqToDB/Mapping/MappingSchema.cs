@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data.Linq;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
@@ -418,7 +419,7 @@ namespace LinqToDB.Mapping
 			if (li.Delegate == null)
 			{
 				var rex = (Expression<Func<TFrom,TTo>>)ReduceDefaultValue(li.CheckNullLambda);
-				var l   = rex.Compile();
+				var l   = rex.CompileExpression();
 
 				Schemas[0].SetConvertInfo(from, to, new ConvertInfo.LambdaInfo(li.CheckNullLambda, null, l, li.IsSchemaSpecific));
 
@@ -1449,7 +1450,7 @@ namespace LinqToDB.Mapping
 		/// <returns>Mapping values for enum type and <c>null</c> for non-enum types.</returns>
 		public virtual MapValue[]? GetMapValues(Type type)
 		{
-			if (type == null) throw new ArgumentNullException("type");
+			if (type == null) throw new ArgumentNullException(nameof(type));
 
 			if (_mapValues == null)
 				_mapValues = new ConcurrentDictionary<Type,MapValue[]?>();
@@ -1525,12 +1526,14 @@ namespace LinqToDB.Mapping
 		public EntityDescriptor GetEntityDescriptor(Type type)
 		{
 			var key = new { Type = type, ConfigurationID };
-			var ed = EntityDescriptorsCache.GetOrCreate(key,
-				o =>
+			var ed = EntityDescriptorsCache.GetOrCreate(
+				key,
+				this,
+				static (o, key, context) =>
 				{
 					o.SlidingExpiration = Configuration.Linq.CacheSlidingExpiration;
-					var edNew = new EntityDescriptor(this, type);
-					EntityDescriptorCreatedCallback?.Invoke(this, edNew);
+					var edNew = new EntityDescriptor(context, key.Type);
+					context.EntityDescriptorCreatedCallback?.Invoke(context, edNew);
 					return edNew;
 				});
 
@@ -1553,7 +1556,7 @@ namespace LinqToDB.Mapping
 		/// </summary>
 		public static void ClearCache()
 		{
-			EntityDescriptorsCache.Compact(1);
+			EntityDescriptorsCache.Clear();
 		}
 
 		internal void ResetEntityDescriptor(Type type)

@@ -33,7 +33,7 @@ namespace Tests
 			if (context == null)
 				return;
 
-			var fixturePath = Path.Combine(baselinesPath, target, context, test.ClassName.Replace('.', Path.DirectorySeparatorChar));
+			var fixturePath = Path.Combine(baselinesPath, target, context, test.ClassName!.Replace('.', Path.DirectorySeparatorChar));
 			Directory.CreateDirectory(fixturePath);
 
 			var fileName = $"{NormalizeFileName(test.FullName)}.sql";
@@ -55,19 +55,21 @@ namespace Tests
 				.Replace("<" , $"0x{(ushort)'<':X4}")
 				.Replace("/" , $"0x{(ushort)'/':X4}")
 				.Replace(":" , $"0x{(ushort)':':X4}")
+				.Replace("*" , $"0x{(ushort)'*':X4}")
+				.Replace("?" , $"0x{(ushort)'?':X4}")
 				;
 		}
 
 		private static string? GetTestContextName(Test test)
 		{
-			var parameters = test.Method.GetParameters();
+			var parameters = test.Method!.GetParameters();
 			for (var i = 0; i < parameters.Length; i++)
 			{
 				var attr = parameters[i].GetCustomAttributes<DataSourcesBaseAttribute>(true);
 
 				if (attr.Length != 0)
 				{
-					return (string)test.Arguments[i];
+					return (string)test.Arguments[i]!;
 				}
 			}
 

@@ -15,8 +15,9 @@
 			// DB2 LUW 9/10 supports only FETCH, v11 adds OFFSET, but for that we need to introduce versions into DB2 provider first
 			statement = SeparateDistinctFromPagination(statement, q => q.Select.SkipValue != null);
 			statement = ReplaceDistinctOrderByWithRowNumber(statement, q => q.Select.SkipValue != null);
-			statement = ReplaceTakeSkipWithRowNumber(statement, query => query.Select.SkipValue != null && SqlProviderFlags.GetIsSkipSupportedFlag(query), true);
+			statement = ReplaceTakeSkipWithRowNumber(statement, query => query.Select.SkipValue != null && SqlProviderFlags.GetIsSkipSupportedFlag(query.Select.TakeValue, query.Select.SkipValue), true);
 
+			// This is mutable part
 			return statement.QueryType switch
 			{
 				QueryType.Delete => GetAlternativeDelete((SqlDeleteStatement)statement),
@@ -25,11 +26,18 @@
 			};
 		}
 
-		public override ISqlExpression ConvertExpression(ISqlExpression expr, bool withParameters)
-		{
-			expr = base.ConvertExpression(expr, withParameters);
+		public override bool CanCompareSearchConditions => true;
+		
+		protected static string[] DB2LikeCharactersToEscape = {"%", "_"};
 
-			if (expr is SqlBinaryExpression be)
+		public override string[] LikeCharactersToEscape => DB2LikeCharactersToEscape;
+
+		public override ISqlExpression ConvertExpressionImpl(ISqlExpression expression, ConvertVisitor visitor,
+			EvaluationContext context)
+		{
+			expression = base.ConvertExpressionImpl(expression, visitor, context);
+
+			if (expression is SqlBinaryExpression be)
 			{
 				switch (be.Operation)
 				{
@@ -41,17 +49,17 @@
 					case "&": return new SqlFunction(be.SystemType, "BitAnd", be.Expr1, be.Expr2);
 					case "|": return new SqlFunction(be.SystemType, "BitOr", be.Expr1, be.Expr2);
 					case "^": return new SqlFunction(be.SystemType, "BitXor", be.Expr1, be.Expr2);
-					case "+": return be.SystemType == typeof(string) ? new SqlBinaryExpression(be.SystemType, be.Expr1, "||", be.Expr2, be.Precedence) : expr;
+					case "+": return be.SystemType == typeof(string) ? new SqlBinaryExpression(be.SystemType, be.Expr1, "||", be.Expr2, be.Precedence) : expression;
 				}
 			}
-			else if (expr is SqlFunction func)
+			else if (expression is SqlFunction func)
 			{
 				switch (func.Name)
 				{
 					case "Convert"    :
 						if (func.SystemType.ToUnderlying() == typeof(bool))
 						{
-							var ex = AlternativeConvertToBoolean(func, 1, withParameters);
+							var ex = AlternativeConvertToBoolean(func, 1);
 							if (ex != null)
 								return ex;
 						}
@@ -111,7 +119,14 @@
 				}
 			}
 
-			return expr;
+			return expression;
 		}
+
+		protected override ISqlExpression ConvertFunction(SqlFunction func)
+		{
+			func = ConvertFunctionParameters(func, false);
+			return base.ConvertFunction(func);
+		}
+
 	}
 }

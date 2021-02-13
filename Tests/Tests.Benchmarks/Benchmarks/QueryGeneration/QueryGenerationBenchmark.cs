@@ -1,18 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using BenchmarkDotNet.Attributes;
 using LinqToDB.Benchmarks.Models;
 using LinqToDB.DataProvider;
 using LinqToDB.DataProvider.Access;
-using LinqToDB.DataProvider.DB2;
 using LinqToDB.DataProvider.Firebird;
-using LinqToDB.DataProvider.Informix;
-using LinqToDB.DataProvider.MySql;
-using LinqToDB.DataProvider.Oracle;
-using LinqToDB.DataProvider.PostgreSQL;
-using LinqToDB.DataProvider.SQLite;
-using LinqToDB.DataProvider.SqlServer;
 
 namespace LinqToDB.Benchmarks.Benchmarks.QueryGeneration
 {
@@ -31,6 +23,7 @@ namespace LinqToDB.Benchmarks.Benchmarks.QueryGeneration
 
 			_dataProviders.Add(ProviderName.Access,                new AccessOleDbDataProvider());
 			_dataProviders.Add(ProviderName.Firebird,              new FirebirdDataProvider());
+			/*
 			_dataProviders.Add(ProviderName.SQLiteMS,              new SQLiteDataProvider(ProviderName.SQLiteMS));
 			_dataProviders.Add(ProviderName.SQLiteClassic,         new SQLiteDataProvider(ProviderName.SQLiteClassic));
 			//_dataProviders.Add(ProviderName.OracleManaged + ".11", new OracleDataProvider(ProviderName.OracleManaged, OracleVersion.v11));
@@ -45,6 +38,7 @@ namespace LinqToDB.Benchmarks.Benchmarks.QueryGeneration
 			_dataProviders.Add(ProviderName.SqlServer2008,         new SqlServerDataProvider(ProviderName.SqlServer2008, SqlServerVersion.v2008));
 			_dataProviders.Add(ProviderName.SqlServer2012,         new SqlServerDataProvider(ProviderName.SqlServer2012, SqlServerVersion.v2012));
 			_dataProviders.Add(ProviderName.SqlServer2017,         new SqlServerDataProvider(ProviderName.SqlServer2017, SqlServerVersion.v2017));
+		*/
 		}
 
 		Dictionary<string, IDataProvider> _dataProviders = new Dictionary<string, IDataProvider>();
@@ -78,6 +72,18 @@ namespace LinqToDB.Benchmarks.Benchmarks.QueryGeneration
 			for (int i = 0; i < 2; i++)
 			{
 				var str = db.VwSalesByYear(2010 + i).Where(e => i == 1).ToString();
+			}
+		}
+
+		[Benchmark]
+		public void VwSalesByCategoryContains()
+		{
+			using var db = GetDataConnection(DataProvider);
+
+			for (int i = 0; i < 2; i++)
+			{
+				var param = i.ToString();
+				var str   = db.VwSalesByCategory(2010 + i).Where(e => e.CategoryName.Contains(param)).ToString();
 			}
 		}
 

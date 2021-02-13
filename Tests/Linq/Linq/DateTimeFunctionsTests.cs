@@ -13,7 +13,7 @@ namespace Tests.Linq
 	[TestFixture]
 	public class DateTimeFunctionsTests : TestBase
 	{
-		//This custom comparers allows for an error of 1 millisecond.  
+		//This custom comparers allows for an error of 1 millisecond.
 		public class CustomIntComparer : IEqualityComparer<int>
 		{
 			private readonly int _precision;
@@ -25,7 +25,7 @@ namespace Tests.Linq
 
 			public bool Equals(int x, int y) => (x >= (y - _precision) && x <= (y + _precision));
 
-			public int GetHashCode(int x) => 0;
+			public int GetHashCode(int obj) => 0;
 		}
 
 		public class CustomNullableIntComparer : IEqualityComparer<int?>
@@ -44,7 +44,7 @@ namespace Tests.Linq
 				return (x.Value >= (y.Value - _precision) && x.Value <= (y.Value + _precision));
 			}
 
-			public int GetHashCode(int? x) => 0;
+			public int GetHashCode(int? obj) => 0;
 		}
 
 		public class CustomNullableDateTimeComparer : IEqualityComparer<DateTime?>
@@ -56,7 +56,7 @@ namespace Tests.Linq
 				return x.Value.Between(y.Value.AddMilliseconds(-1), y.Value.AddMilliseconds(1));
 			}
 
-			public int GetHashCode(DateTime? x) => 0;
+			public int GetHashCode(DateTime? obj) => 0;
 		}
 
 		public class CustomDateTimeComparer : IEqualityComparer<DateTime>
@@ -66,7 +66,7 @@ namespace Tests.Linq
 				return x.Between(y.AddMilliseconds(-1), y.AddMilliseconds(1));
 			}
 
-			public int GetHashCode(DateTime x) => 0;
+			public int GetHashCode(DateTime obj) => 0;
 		}
 
 		[Test]
@@ -123,7 +123,7 @@ namespace Tests.Linq
 
 		[Test]
 		public void CurrentTzTimestamp(
-			[IncludeDataSources(TestProvName.AllSqlServer2005Plus, TestProvName.AllOracle, TestProvName.AllPostgreSQL10Plus)]
+			[IncludeDataSources(TestProvName.AllSqlServer2008Plus, TestProvName.AllOracle, TestProvName.AllPostgreSQL10Plus)]
 			string context)
 		{
 			using (new DisableBaseline("Server-side date generation test"))
@@ -443,7 +443,7 @@ namespace Tests.Linq
 
 		[Test]
 		public void DatepartDynamic(
-			[DataSources(TestProvName.AllInformix)] string context, 
+			[DataSources(TestProvName.AllInformix)] string context,
 			[Values(
 				Sql.DateParts.Day,
 				Sql.DateParts.Hour,
@@ -843,11 +843,11 @@ namespace Tests.Linq
 
 		[Test]
 		public void AddDynamicFromColumn(
-			[DataSources(TestProvName.AllInformix)] string context, 
+			[DataSources(TestProvName.AllInformix)] string context,
 			[Values(
-				Sql.DateParts.Day, 
-				Sql.DateParts.Hour, 
-				Sql.DateParts.Minute, 
+				Sql.DateParts.Day,
+				Sql.DateParts.Hour,
+				Sql.DateParts.Minute,
 				Sql.DateParts.Month,
 				Sql.DateParts.Year,
 				Sql.DateParts.Second
@@ -1413,6 +1413,15 @@ namespace Tests.Linq
 		}
 
 		[Test]
+		public void MakeDateTimeParametersMonth([DataSources] string context, [Values(1, 10)] int month)
+		{
+			using (var db = GetDataContext(context))
+				AreEqual(
+					from t in from p in    Types select Sql.MakeDateTime(2010 + p.ID, month, 1) select t,
+					from t in from p in db.Types select Sql.MakeDateTime(2010 + p.ID, month, 1) select t);
+		}
+
+		[Test]
 		public void NewDateTime1([DataSources] string context)
 		{
 			using (var db = GetDataContext(context))
@@ -1528,9 +1537,9 @@ namespace Tests.Linq
 					{
 						ID              = g.Key,
 						Count           = g.Count(),
-						Duration        = g.Sum(x => Sql.DateDiff(Sql.DateParts.Millisecond, x.DateTimeValue, x.DateTimeValue))!.Value,
-						HasDuration     = g.Sum(x => Sql.DateDiff(Sql.DateParts.Millisecond, x.DateTimeValue, x.DateTimeValue)).HasValue,
-						LongestDuration = g.Max(x => Sql.DateDiff(Sql.DateParts.Millisecond, x.DateTimeValue, x.DateTimeValue)!.Value),
+						Duration        = g.Sum(x => Sql.DateDiff(Sql.DateParts.Millisecond, x.DateTimeValue, x.DateTimeValue.AddDays(1)))!.Value,
+						HasDuration     = g.Sum(x => Sql.DateDiff(Sql.DateParts.Millisecond, x.DateTimeValue, x.DateTimeValue.AddDays(1))).HasValue,
+						LongestDuration = g.Max(x => Sql.DateDiff(Sql.DateParts.Millisecond, x.DateTimeValue, x.DateTimeValue.AddDays(1))!.Value),
 					},
 					from t in db.Types
 					group t by t.ID into g
@@ -1538,9 +1547,9 @@ namespace Tests.Linq
 					{
 						ID              = g.Key,
 						Count           = g.Count(),
-						Duration        = g.Sum(x => Sql.DateDiff(Sql.DateParts.Millisecond, x.DateTimeValue, x.DateTimeValue))!.Value,
-						HasDuration     = g.Sum(x => Sql.DateDiff(Sql.DateParts.Millisecond, x.DateTimeValue, x.DateTimeValue)).HasValue,
-						LongestDuration = g.Max(x => Sql.DateDiff(Sql.DateParts.Millisecond, x.DateTimeValue, x.DateTimeValue)!.Value),
+						Duration        = g.Sum(x => Sql.DateDiff(Sql.DateParts.Millisecond, x.DateTimeValue, x.DateTimeValue.AddDays(1)))!.Value,
+						HasDuration     = g.Sum(x => Sql.DateDiff(Sql.DateParts.Millisecond, x.DateTimeValue, x.DateTimeValue.AddDays(1))).HasValue,
+						LongestDuration = g.Max(x => Sql.DateDiff(Sql.DateParts.Millisecond, x.DateTimeValue, x.DateTimeValue.AddDays(1))!.Value),
 					});
 			}
 		}

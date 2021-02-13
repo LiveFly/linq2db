@@ -11,7 +11,7 @@ namespace LinqToDB.SqlQuery
 	[DebuggerDisplay("CTE({CteID}, {Name})")]
 	public class CteClause : IQueryElement, ICloneableElement, ISqlExpressionWalkable
 	{
-		SqlField[]? _fields = new SqlField[0];
+		SqlField[]? _fields = Array<SqlField>.Empty;
 
 		public static int CteIDCounter;
 
@@ -21,7 +21,7 @@ namespace LinqToDB.SqlQuery
 			private set => _fields = value;
 		}
 
-		public int                          CteID  { get; } = Interlocked.Increment(ref CteIDCounter);
+		public int          CteID       { get; } = Interlocked.Increment(ref CteIDCounter);
 
 		public string?      Name        { get; set; }
 		public SelectQuery? Body        { get; set; }
@@ -77,7 +77,7 @@ namespace LinqToDB.SqlQuery
 
 		public StringBuilder ToString(StringBuilder sb, Dictionary<IQueryElement, IQueryElement> dic)
 		{
-			return sb.Append(Name ?? "CTE");
+			return sb.Append($"CTE({CteID}, {Name})");
 		}
 
 		public ICloneableElement Clone(Dictionary<ICloneableElement, ICloneableElement> objectTree, Predicate<ICloneableElement> doClone)

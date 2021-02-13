@@ -4,25 +4,25 @@ using System.Data;
 using System.Data.Linq;
 using System.Data.SqlTypes;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
+using System.Linq.Expressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
 using System.Xml.Linq;
-
 using LinqToDB;
 using LinqToDB.Common;
 using LinqToDB.Data;
+using LinqToDB.DataProvider;
 using LinqToDB.DataProvider.SqlServer;
+using LinqToDB.Linq.Internal;
 using LinqToDB.Mapping;
 using LinqToDB.SchemaProvider;
-using System.Threading;
-using Tests.Model;
-
 using Microsoft.SqlServer.Types;
-
 using NUnit.Framework;
-using System.Diagnostics.CodeAnalysis;
+using Tests.Model;
 
 namespace Tests.DataProvider
 {
@@ -39,6 +39,8 @@ namespace Tests.DataProvider
 		[Test]
 		public void TestParameters([IncludeDataSources(TestProvName.AllSqlServer)] string context)
 		{
+			// mapping fails and fallbacks to slow-mapper
+			using (new CustomCommandProcessor(null))
 			using (var conn = new DataConnection(context))
 			{
 				Assert.That(conn.Execute<string>("SELECT @p",        new { p =  1  }), Is.EqualTo("1"));
@@ -266,14 +268,92 @@ namespace Tests.DataProvider
 		{
 			using (var conn = new DataConnection(context))
 			{
-				var dateTime2 = new DateTime(2012, 12, 12, 12, 12, 12, 12);
+				var dateTime2 = new DateTime(2012, 12, 12, 12, 12, 12, 12).AddTicks(1);
 
-				Assert.That(conn.Execute<DateTime> ("SELECT Cast('2012-12-12 12:12:12.012' as datetime2)"), Is.EqualTo(dateTime2));
-				Assert.That(conn.Execute<DateTime?>("SELECT Cast('2012-12-12 12:12:12.012' as datetime2)"), Is.EqualTo(dateTime2));
+				Assert.That(conn.Execute<DateTime> ("SELECT Cast('2012-12-12 12:12:12.0120001' as datetime2)"), Is.EqualTo(dateTime2));
+				Assert.That(conn.Execute<DateTime?>("SELECT Cast('2012-12-12 12:12:12.0120001' as datetime2)"), Is.EqualTo(dateTime2));
 
 				Assert.That(conn.Execute<DateTime> ("SELECT @p", DataParameter.DateTime2("p", dateTime2)),               Is.EqualTo(dateTime2));
 				Assert.That(conn.Execute<DateTime> ("SELECT @p", DataParameter.Create   ("p", dateTime2)),               Is.EqualTo(dateTime2));
 				Assert.That(conn.Execute<DateTime?>("SELECT @p", new DataParameter("p", dateTime2, DataType.DateTime2)), Is.EqualTo(dateTime2));
+			}
+		}
+
+		[Table]
+		class DateTime2Table
+		{
+			[Column] public int Id { get; set; }
+			[Column(DataType = DataType.DateTime2)] public DateTime DTD { get; set; }
+			[Column(DataType = DataType.DateTime2, Precision = 0)] public DateTime DT0 { get; set; }
+			[Column(DataType = DataType.DateTime2, Precision = 1)] public DateTime DT1 { get; set; }
+			[Column(DataType = DataType.DateTime2, Precision = 2)] public DateTime DT2 { get; set; }
+			[Column(DataType = DataType.DateTime2, Precision = 3)] public DateTime DT3 { get; set; }
+			[Column(DataType = DataType.DateTime2, Precision = 4)] public DateTime DT4 { get; set; }
+			[Column(DataType = DataType.DateTime2, Precision = 5)] public DateTime DT5 { get; set; }
+			[Column(DataType = DataType.DateTime2, Precision = 6)] public DateTime DT6 { get; set; }
+			[Column(DataType = DataType.DateTime2, Precision = 7)] public DateTime DT7 { get; set; }
+
+			public static readonly DateTime2Table[] Data = new[]
+			{
+				new DateTime2Table()
+				{
+					Id  = 1,
+					DTD = new DateTime(2012, 12, 12, 12, 12, 12, 123).AddTicks(1234),
+					DT0 = new DateTime(2012, 12, 12, 12, 12, 12, 123).AddTicks(1234),
+					DT1 = new DateTime(2012, 12, 12, 12, 12, 12, 123).AddTicks(1234),
+					DT2 = new DateTime(2012, 12, 12, 12, 12, 12, 123).AddTicks(1234),
+					DT3 = new DateTime(2012, 12, 12, 12, 12, 12, 123).AddTicks(1234),
+					DT4 = new DateTime(2012, 12, 12, 12, 12, 12, 123).AddTicks(1234),
+					DT5 = new DateTime(2012, 12, 12, 12, 12, 12, 123).AddTicks(1234),
+					DT6 = new DateTime(2012, 12, 12, 12, 12, 12, 123).AddTicks(1234),
+					DT7 = new DateTime(2012, 12, 12, 12, 12, 12, 123).AddTicks(1234),
+				},
+				new DateTime2Table()
+				{
+					Id  = 2,
+					DTD = new DateTime(2012, 12, 12, 12, 12, 12, 0).AddTicks(1234),
+					DT0 = new DateTime(2012, 12, 12, 12, 12, 12, 0).AddTicks(1234),
+					DT1 = new DateTime(2012, 12, 12, 12, 12, 12, 0).AddTicks(1234),
+					DT2 = new DateTime(2012, 12, 12, 12, 12, 12, 0).AddTicks(1234),
+					DT3 = new DateTime(2012, 12, 12, 12, 12, 12, 0).AddTicks(1234),
+					DT4 = new DateTime(2012, 12, 12, 12, 12, 12, 0).AddTicks(1234),
+					DT5 = new DateTime(2012, 12, 12, 12, 12, 12, 0).AddTicks(1234),
+					DT6 = new DateTime(2012, 12, 12, 12, 12, 12, 0).AddTicks(1234),
+					DT7 = new DateTime(2012, 12, 12, 12, 12, 12, 0).AddTicks(1234),
+				}
+			};
+		}
+
+		[Test]
+		public void TestDateTime2Precision([IncludeDataSources(TestProvName.AllSqlServer2008Plus)] string context, [Values] bool inline)
+		{
+			using (var db = new TestDataConnection(context))
+			using (var tb = db.CreateLocalTable(DateTime2Table.Data))
+			{
+				db.InlineParameters = inline;
+
+				var dt2     = DateTime2Table.Data[0].DTD;
+				var dt2NoMs = DateTime2Table.Data[1].DTD;
+
+				Assert.AreEqual(1, tb.Where(_ => _.DTD == dt2).Select(_ => _.Id).SingleOrDefault());
+				Assert.AreEqual(2, tb.Where(_ => _.DT0 == dt2).Select(_ => _.Id).Count());
+				Assert.AreEqual(1, tb.Where(_ => _.DT1 == dt2).Select(_ => _.Id).SingleOrDefault());
+				Assert.AreEqual(1, tb.Where(_ => _.DT2 == dt2).Select(_ => _.Id).SingleOrDefault());
+				Assert.AreEqual(1, tb.Where(_ => _.DT3 == dt2).Select(_ => _.Id).SingleOrDefault());
+				Assert.AreEqual(1, tb.Where(_ => _.DT4 == dt2).Select(_ => _.Id).SingleOrDefault());
+				Assert.AreEqual(1, tb.Where(_ => _.DT5 == dt2).Select(_ => _.Id).SingleOrDefault());
+				Assert.AreEqual(1, tb.Where(_ => _.DT6 == dt2).Select(_ => _.Id).SingleOrDefault());
+				Assert.AreEqual(1, tb.Where(_ => _.DT7 == dt2).Select(_ => _.Id).SingleOrDefault());
+
+				Assert.AreEqual(2, tb.Where(_ => _.DTD == dt2NoMs).Select(_ => _.Id).SingleOrDefault());
+				Assert.AreEqual(2, tb.Where(_ => _.DT0 == dt2NoMs).Select(_ => _.Id).Count());
+				Assert.AreEqual(2, tb.Where(_ => _.DT1 == dt2NoMs).Select(_ => _.Id).SingleOrDefault());
+				Assert.AreEqual(2, tb.Where(_ => _.DT2 == dt2NoMs).Select(_ => _.Id).SingleOrDefault());
+				Assert.AreEqual(2, tb.Where(_ => _.DT3 == dt2NoMs).Select(_ => _.Id).SingleOrDefault());
+				Assert.AreEqual(2, tb.Where(_ => _.DT4 == dt2NoMs).Select(_ => _.Id).SingleOrDefault());
+				Assert.AreEqual(2, tb.Where(_ => _.DT5 == dt2NoMs).Select(_ => _.Id).SingleOrDefault());
+				Assert.AreEqual(2, tb.Where(_ => _.DT6 == dt2NoMs).Select(_ => _.Id).SingleOrDefault());
+				Assert.AreEqual(2, tb.Where(_ => _.DT7 == dt2NoMs).Select(_ => _.Id).SingleOrDefault());
 			}
 		}
 
@@ -407,7 +487,7 @@ namespace Tests.DataProvider
 				}
 				else
 				{
-					isScCollation = conn.Execute<int>("SELECT COUNT(*) FROM sys.Databases WHERE database_id = DB_ID() AND collation_name LIKE '%_SC'") > 0;
+					isScCollation = conn.Execute<int>("SELECT COUNT(*) FROM sys.databases WHERE database_id = DB_ID() AND collation_name LIKE '%_SC'") > 0;
 				}
 				if (isScCollation)
 				{
@@ -490,10 +570,10 @@ namespace Tests.DataProvider
 				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.VarBinary("p", arr1)), Is.EqualTo(arr1));
 				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.Create   ("p", arr1)), Is.EqualTo(arr1));
 				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.VarBinary("p", null)), Is.EqualTo(null));
-				Assert.That(conn.Execute<byte[]>("SELECT Cast(@p as binary(1))", DataParameter.Binary("p", new byte[0])), Is.EqualTo(new byte[] {0}));
-				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.Binary   ("p", new byte[0])), Is.EqualTo(new byte[8000]));
-				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.VarBinary("p", new byte[0])), Is.EqualTo(new byte[0]));
-				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.Image    ("p", new byte[0])), Is.EqualTo(new byte[0]));
+				Assert.That(conn.Execute<byte[]>("SELECT Cast(@p as binary(1))", DataParameter.Binary("p", Array<byte>.Empty)), Is.EqualTo(new byte[] {0}));
+				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.Binary   ("p", Array<byte>.Empty)), Is.EqualTo(new byte[8000]));
+				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.VarBinary("p", Array<byte>.Empty)), Is.EqualTo(Array<byte>.Empty));
+				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.Image    ("p", Array<byte>.Empty)), Is.EqualTo(Array<byte>.Empty));
 				Assert.That(conn.Execute<byte[]>("SELECT @p", new DataParameter { Name = "p", Value = arr1 }), Is.EqualTo(arr1));
 				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.Create   ("p", new Binary(arr1))), Is.EqualTo(arr1));
 				Assert.That(conn.Execute<byte[]>("SELECT @p", new DataParameter("p", new Binary(arr1))), Is.EqualTo(arr1));
@@ -1332,46 +1412,37 @@ namespace Tests.DataProvider
 		[Test]
 		public void OverflowTest([IncludeDataSources(TestProvName.AllSqlServer)] string context)
 		{
-			var func = SqlServerTools.DataReaderGetDecimal;
-			try
-			{
-				SqlServerTools.DataReaderGetDecimal = GetDecimal;
+			SqlServerDataProvider provider;
 
-				using (var db = new DataConnection(context))
-				{
-					var list = db.GetTable<DecimalOverflow>().ToList();
-				}
-			}
-			finally
+			using (var db = new DataConnection(context))
 			{
-				SqlServerTools.DataReaderGetDecimal = func;
+				provider = new SqlServerDataProvider(db.DataProvider.Name, ((SqlServerDataProvider)db.DataProvider).Version, ((SqlServerDataProvider)db.DataProvider).Provider);
+			}
+
+			provider.ReaderExpressions[new ReaderInfo { FieldType = typeof(decimal) }] = (Expression<Func<IDataReader, int, decimal>>)((r, i) => GetDecimal(r, i));
+
+			using (var db = new DataConnection(provider, DataConnection.GetConnectionString(context)))
+			{
+				var list = db.GetTable<DecimalOverflow>().ToList();
 			}
 		}
 
 		const int ClrPrecision = 29;
 
+		[ColumnReader(1)]
 		static decimal GetDecimal(IDataReader rd, int idx)
 		{
-			try
+			SqlDecimal value = ((dynamic)rd).GetSqlDecimal(idx);
+
+			if (value.Precision > ClrPrecision)
 			{
-				SqlDecimal value = ((dynamic)rd).GetSqlDecimal(idx);
+				var str = value.ToString();
+				var val = decimal.Parse(str, CultureInfo.InvariantCulture);
 
-				if (value.Precision > ClrPrecision)
-				{
-					var str = value.ToString();
-					var val = decimal.Parse(str, CultureInfo.InvariantCulture);
-
-					return val;
-				}
-
-				return value.Value;
+				return val;
 			}
-			catch (Exception)
-			{
-				var vvv=  rd.GetValue(idx);
 
-				throw;
-			}
+			return value.Value;
 		}
 
 		[Table("DecimalOverflow")]
@@ -1385,20 +1456,9 @@ namespace Tests.DataProvider
 		[Test]
 		public void OverflowTest2([IncludeDataSources(TestProvName.AllSqlServer)] string context)
 		{
-			var func = SqlServerTools.DataReaderGetDecimal;
-
-			try
+			using (var db = new DataConnection(context))
 			{
-				SqlServerTools.DataReaderGetDecimal = (rd, idx) => { throw new Exception(); };
-
-				using (var db = new DataConnection(context))
-				{
-					var list = db.GetTable<DecimalOverflow2>().ToList();
-				}
-			}
-			finally
-			{
-				SqlServerTools.DataReaderGetDecimal = func;
+				var list = db.GetTable<DecimalOverflow2>().ToList();
 			}
 		}
 

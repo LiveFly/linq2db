@@ -1,18 +1,18 @@
 ﻿using System;
 using System.Data;
-using System.Globalization;
 using System.Linq;
+using System.Text;
 using System.Net;
 using System.Net.NetworkInformation;
-using System.Text;
+using System.Globalization;
 
 namespace LinqToDB.DataProvider.PostgreSQL
 {
 	using Common;
-	using Extensions;
-	using Mapping;
 	using SqlQuery;
 	using SqlProvider;
+	using Extensions;
+	using Mapping;
 
 	public class PostgreSQLSqlBuilder : BasicSqlBuilder
 	{
@@ -47,7 +47,7 @@ namespace LinqToDB.DataProvider.PostgreSQL
 				throw new SqlException("Identity field must be defined for '{0}'.", insertClause.Into.Name);
 
 			AppendIndent().AppendLine("RETURNING ");
-			AppendIndent().Append("\t");
+			AppendIndent().Append('\t');
 			BuildExpression(identityField, false, true);
 			StringBuilder.AppendLine();
 		}
@@ -143,6 +143,7 @@ namespace LinqToDB.DataProvider.PostgreSQL
 				case ConvertType.NameToQueryTableAlias:
 				case ConvertType.NameToDatabase:
 				case ConvertType.NameToSchema:
+				case ConvertType.SequenceName:
 					if (IdentifierQuoteMode != PostgreSQLIdentifierQuoteMode.None)
 					{
 						if (value.Length > 0 && value[0] == '"')
@@ -225,7 +226,7 @@ namespace LinqToDB.DataProvider.PostgreSQL
 
 				if (attr != null)
 				{
-					var name     = ConvertInline(attr.SequenceName, ConvertType.NameToQueryTable);
+					var name     = ConvertInline(attr.SequenceName, ConvertType.SequenceName);
 					var server   = GetTableServerName(table);
 					var database = GetTableDatabaseName(table);
 					var schema   = attr.Schema != null
@@ -235,7 +236,7 @@ namespace LinqToDB.DataProvider.PostgreSQL
 					var sb = new StringBuilder();
 					sb.Append("nextval(");
 					ValueToSqlConverter.Convert(sb, BuildTableName(new StringBuilder(), server, database, schema, name, table.TableOptions).ToString());
-					sb.Append(")");
+					sb.Append(')');
 					return new SqlExpression(sb.ToString(), Precedence.Primary);
 				}
 			}
@@ -269,15 +270,15 @@ namespace LinqToDB.DataProvider.PostgreSQL
 			base.BuildCreateTableFieldType(field);
 		}
 
-		protected override bool BuildJoinType(SqlJoinedTable join)
+		protected override bool BuildJoinType(JoinType joinType, SqlSearchCondition condition)
 		{
-			switch (join.JoinType)
+			switch (joinType)
 			{
 				case JoinType.CrossApply : StringBuilder.Append("INNER JOIN LATERAL "); return true;
 				case JoinType.OuterApply : StringBuilder.Append("LEFT JOIN LATERAL ");  return true;
 			}
 
-			return base.BuildJoinType(join);
+			return base.BuildJoinType(joinType, condition);
 		}
 
 		public override StringBuilder BuildTableName(StringBuilder sb, string? server, string? database, string? schema, string table, TableOptions tableOptions)

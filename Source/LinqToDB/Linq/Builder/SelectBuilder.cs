@@ -53,10 +53,8 @@ namespace LinqToDB.Linq.Builder
 
 #if DEBUG
 			context.MethodCall = methodCall;
-#endif
-
 			Debug.WriteLine("BuildMethodCall Select:\n" + context.SelectQuery);
-
+#endif
 			return context;
 		}
 
@@ -128,11 +126,11 @@ namespace LinqToDB.Linq.Builder
 		#region Convert
 
 		protected override SequenceConvertInfo? Convert(
-			ExpressionBuilder builder, MethodCallExpression originalMethodCall, BuildInfo buildInfo, ParameterExpression? param)
+			ExpressionBuilder builder, MethodCallExpression methodCall, BuildInfo buildInfo, ParameterExpression? param)
 		{
-			var methodCall = originalMethodCall;
-			var selector   = (LambdaExpression)methodCall.Arguments[1].Unwrap();
-			var info       = builder.ConvertSequence(new BuildInfo(buildInfo, methodCall.Arguments[0]), selector.Parameters[0], true);
+			var originalMethodCall = methodCall;
+			var selector           = (LambdaExpression)methodCall.Arguments[1].Unwrap();
+			var info               = builder.ConvertSequence(new BuildInfo(buildInfo, methodCall.Arguments[0]), selector.Parameters[0], true);
 
 			if (info != null)
 			{

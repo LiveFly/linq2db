@@ -1,9 +1,6 @@
 ﻿using System;
 using System.Linq;
 using System.Linq.Expressions;
-#if NET472
-using System.ServiceModel;
-#endif
 
 using LinqToDB;
 using LinqToDB.Mapping;
@@ -1724,6 +1721,8 @@ namespace Tests.Linq
 		{
 			GetProviderName(context, out var isLinqService);
 
+			// mapping fails and fallbacks to slow-mapper
+			using (new CustomCommandProcessor(null))
 			using (var db = GetDataContext(context))
 			{
 				using (new Cleaner(db))
@@ -1734,17 +1733,6 @@ namespace Tests.Linq
 						TestField = 5
 					});
 
-#if NET472
-					if (isLinqService)
-					{
-						Assert.Throws<FaultException<ExceptionDetail>>(() =>
-							db.GetTable<UndefinedValueTest>()
-								.Select(r => new { r.Id, r.TestField })
-								.Where(r => r.Id == RID)
-								.ToList());
-					}
-					else
-#endif
 					Assert.Throws<LinqToDBConvertException>(() =>
 						db.GetTable<UndefinedValueTest>()
 							.Select(r => new { r.Id, r.TestField })
@@ -1775,14 +1763,14 @@ namespace Tests.Linq
 		public void Issue1622Test([DataSources] string context)
 		{
 			var ms = new MappingSchema();
-			using (var db = GetDataContext(context, ms))
-			{
 				ms.SetValueToSqlConverter(typeof(Issue1622Enum),
 					(sb, dt, v) =>
 					{
-						sb.Append("'").Append(((Issue1622Enum)v).ToString()).Append("_suffix'");
+						sb.Append('\'').Append(((Issue1622Enum)v).ToString()).Append("_suffix'");
 					});
 
+			using (var db = GetDataContext(context, ms))
+			{
 				using (var table = db.CreateLocalTable<Issue1622Table>())
 				{
 					var item = new Issue1622Table() { Id = 1, SomeText = "Value1_suffix" };

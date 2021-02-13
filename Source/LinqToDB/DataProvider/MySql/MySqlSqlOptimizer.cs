@@ -12,6 +12,8 @@ namespace LinqToDB.DataProvider.MySql
 		{
 		}
 
+		public override bool CanCompareSearchConditions => true;
+		
 		public override SqlStatement TransformStatement(SqlStatement statement)
 		{
 			return statement.QueryType switch
@@ -34,11 +36,12 @@ namespace LinqToDB.DataProvider.MySql
 			return statement;
 		}
 
-		public override ISqlExpression ConvertExpression(ISqlExpression expr, bool withParameters)
+		public override ISqlExpression ConvertExpressionImpl(ISqlExpression expression, ConvertVisitor visitor,
+			EvaluationContext context)
 		{
-			expr = base.ConvertExpression(expr, withParameters);
+			expression = base.ConvertExpressionImpl(expression, visitor, context);
 
-			if (expr is SqlBinaryExpression be)
+			if (expression is SqlBinaryExpression be)
 			{
 				switch (be.Operation)
 				{
@@ -77,7 +80,7 @@ namespace LinqToDB.DataProvider.MySql
 						break;
 				}
 			}
-			else if (expr is SqlFunction func)
+			else if (expression is SqlFunction func)
 			{
 				switch (func.Name)
 				{
@@ -86,7 +89,7 @@ namespace LinqToDB.DataProvider.MySql
 
 						if (ftype == typeof(bool))
 						{
-							var ex = AlternativeConvertToBoolean(func, 1, withParameters);
+							var ex = AlternativeConvertToBoolean(func, 1);
 							if (ex != null)
 								return ex;
 						}
@@ -98,7 +101,7 @@ namespace LinqToDB.DataProvider.MySql
 				}
 			}
 
-			return expr;
+			return expression;
 		}
 	}
 }

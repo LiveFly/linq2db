@@ -5,6 +5,8 @@ namespace LinqToDB.DataProvider.Oracle
 	using Extensions;
 	using SqlProvider;
 	using SqlQuery;
+	using Mapping;
+	using Tools;
 
 	public class Oracle11SqlOptimizer : BasicSqlOptimizer
 	{
@@ -12,11 +14,11 @@ namespace LinqToDB.DataProvider.Oracle
 		{
 		}
 
-		public override SqlStatement Finalize(SqlStatement statement, bool inlineParameters)
+		public override SqlStatement Finalize(SqlStatement statement)
 		{
 			CheckAliases(statement, 30);
 
-			return base.Finalize(statement, inlineParameters);
+			return base.Finalize(statement);
 		}
 
 		public override SqlStatement TransformStatement(SqlStatement statement)
@@ -29,16 +31,91 @@ namespace LinqToDB.DataProvider.Oracle
 				case QueryType.Update : statement = GetAlternativeUpdate((SqlUpdateStatement) statement); break;
 			}
 
-			statement = QueryHelper.OptimizeSubqueries(statement);
-
 			return statement;
 		}
 
-		public override ISqlExpression ConvertExpression(ISqlExpression expr, bool withParameters)
-		{
-			expr = base.ConvertExpression(expr, withParameters);
+		protected static string[] OracleLikeCharactersToEscape = {"%", "_"};
 
-			if (expr is SqlBinaryExpression be)
+		public override string[] LikeCharactersToEscape => OracleLikeCharactersToEscape;
+
+		public override bool IsParameterDependedElement(IQueryElement element)
+		{
+			if (base.IsParameterDependedElement(element))
+				return true;
+
+			switch (element.ElementType)
+			{
+				case QueryElementType.ExprExprPredicate:
+				{
+					var expr = (SqlPredicate.ExprExpr)element;
+
+					// Oracle saves empty string as null to database, so we need predicate modification before sending query
+					//
+					if (expr.Operator.In(SqlPredicate.Operator.Equal, SqlPredicate.Operator.NotEqual, SqlPredicate.Operator.GreaterOrEqual, SqlPredicate.Operator.LessOrEqual) && expr.WithNull == true)
+					{
+						if (expr.Expr1.SystemType == typeof(string) && expr.Expr1.CanBeEvaluated(true))
+							return true;
+						if (expr.Expr2.SystemType == typeof(string) && expr.Expr2.CanBeEvaluated(true))
+							return true;
+					}
+					break;
+				}
+			}
+
+			return false;
+		}
+
+		public override ISqlPredicate ConvertPredicateImpl(MappingSchema mappingSchema, ISqlPredicate predicate, ConvertVisitor visitor, OptimizationContext optimizationContext)
+		{
+			switch (predicate.ElementType)
+			{
+				case QueryElementType.ExprExprPredicate:
+				{
+					var expr = (SqlPredicate.ExprExpr)predicate;
+
+					// Oracle saves empty string as null to database, so we need predicate modification before sending query
+					//
+					if (expr.Operator.In(SqlPredicate.Operator.Equal, SqlPredicate.Operator.NotEqual, SqlPredicate.Operator.GreaterOrEqual, SqlPredicate.Operator.LessOrEqual) && expr.WithNull == true)
+					{
+						if (expr.Expr1.SystemType == typeof(string) &&
+						    expr.Expr1.TryEvaluateExpression(optimizationContext.Context, out var value1) && value1 is string string1)
+						{
+							if (string1 == "")
+							{
+								var sc = new SqlSearchCondition();
+								sc.Conditions.Add(new SqlCondition(false, new SqlPredicate.ExprExpr(expr.Expr1, expr.Operator, expr.Expr2, null), true));
+								sc.Conditions.Add(new SqlCondition(false, new SqlPredicate.IsNull(expr.Expr2, false), true));
+								return sc;
+							}
+						}
+
+						if (expr.Expr2.SystemType == typeof(string) &&
+						    expr.Expr2.TryEvaluateExpression(optimizationContext.Context, out var value2) && value2 is string string2)
+						{
+							if (string2 == "")
+							{
+								var sc = new SqlSearchCondition();
+								sc.Conditions.Add(new SqlCondition(false, new SqlPredicate.ExprExpr(expr.Expr1, expr.Operator, expr.Expr2, null), true));
+								sc.Conditions.Add(new SqlCondition(false, new SqlPredicate.IsNull(expr.Expr1, false), true));
+								return sc;
+							}
+						}
+					}
+					break;
+				}
+			}
+
+			predicate = base.ConvertPredicateImpl(mappingSchema, predicate, visitor, optimizationContext);
+
+			return predicate;
+		}
+
+		public override ISqlExpression ConvertExpressionImpl(ISqlExpression expression, ConvertVisitor visitor,
+			EvaluationContext context)
+		{
+			expression = base.ConvertExpressionImpl(expression, visitor, context);
+
+			if (expression is SqlBinaryExpression be)
 			{
 				switch (be.Operation)
 				{
@@ -55,21 +132,24 @@ namespace LinqToDB.DataProvider.Oracle
 							Add(be.Expr1, be.Expr2, be.SystemType),
 							Mul(new SqlFunction(be.SystemType, "BITAND", be.Expr1, be.Expr2), 2),
 							be.SystemType);
-					case "+": return be.SystemType == typeof(string) ? new SqlBinaryExpression(be.SystemType, be.Expr1, "||", be.Expr2, be.Precedence) : expr;
+					case "+": return be.SystemType == typeof(string) ? new SqlBinaryExpression(be.SystemType, be.Expr1, "||", be.Expr2, be.Precedence) : expression;
 				}
 			}
-			else if (expr is SqlFunction func)
+			else if (expression is SqlFunction func)
 			{
 				switch (func.Name)
 				{
-					case "Coalesce"       : return new SqlFunction(func.SystemType, "Nvl", func.Parameters);
+					case "Coalesce":
+					{
+						return ConvertCoalesceToBinaryFunc(func, "Nvl");
+					}
 					case "Convert"        :
 					{
 						var ftype = func.SystemType.ToUnderlying();
 
 						if (ftype == typeof(bool))
 						{
-							var ex = AlternativeConvertToBoolean(func, 1, withParameters);
+							var ex = AlternativeConvertToBoolean(func, 1);
 							if (ex != null)
 								return ex;
 						}
@@ -120,16 +200,16 @@ namespace LinqToDB.DataProvider.Oracle
 							new SqlValue(27));
 				}
 			}
-			else if (expr is SqlExpression e)
+			else if (expression is SqlExpression e)
 			{
 				if (e.Expr.StartsWith("To_Number(To_Char(") && e.Expr.EndsWith(", 'FF'))"))
 					return Div(new SqlExpression(e.SystemType, e.Expr.Replace("To_Number(To_Char(", "to_Number(To_Char("), e.Parameters), 1000);
 			}
 
-			return expr;
+			return expression;
 		}
 
-		static readonly ISqlExpression RowNumExpr = new SqlExpression(typeof(long), "ROWNUM", Precedence.Primary, true, true);
+		static readonly ISqlExpression RowNumExpr = new SqlExpression(typeof(long), "ROWNUM", Precedence.Primary, SqlFlags.IsAggregate | SqlFlags.IsWindowFunction);
 
 		/// <summary>
 		/// Replaces Take/Skip by ROWNUM usage.
@@ -188,6 +268,12 @@ namespace LinqToDB.DataProvider.Oracle
 					query.Select.Take(null, null);
 
 				});
+		}
+
+		protected override ISqlExpression ConvertFunction(SqlFunction func)
+		{
+			func = ConvertFunctionParameters(func, false);
+			return base.ConvertFunction(func);
 		}
 	}
 }

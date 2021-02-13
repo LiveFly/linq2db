@@ -639,15 +639,12 @@ namespace LinqToDB.Linq.Builder
 				else
 				{
 					var exceptionMethod = MemberHelper.MethodOf(() => DefaultInheritanceMappingException(null!, null!));
-					var field  = SqlTable[InheritanceMapping[0].DiscriminatorName] ?? throw new LinqException($"Field {InheritanceMapping[0].DiscriminatorName} not found in table {SqlTable}");
-					var dindex = ConvertToParentIndex(_indexes[field].Index, this);
+					var field           = SqlTable[InheritanceMapping[0].DiscriminatorName] ?? throw new LinqException($"Field {InheritanceMapping[0].DiscriminatorName} not found in table {SqlTable}");
+					var dindex          = ConvertToParentIndex(_indexes[field].Index, this);
 
 					expr = Expression.Convert(
 						Expression.Call(null, exceptionMethod,
-							Expression.Call(
-								ExpressionBuilder.DataReaderParam,
-								ReflectionHelper.DataReader.GetValue,
-								Expression.Constant(dindex)),
+							new ConvertFromDataReaderExpression(typeof(object), dindex, null, ExpressionBuilder.DataReaderParam),
 							Expression.Constant(ObjectType)),
 						ObjectType);
 				}
@@ -1012,9 +1009,9 @@ namespace LinqToDB.Linq.Builder
 
 			#region IsExpression
 
-			public virtual IsExpressionResult IsExpression(Expression? expression, int level, RequestFor requestFor)
+			public virtual IsExpressionResult IsExpression(Expression? expression, int level, RequestFor requestFlag)
 			{
-				switch (requestFor)
+				switch (requestFlag)
 				{
 					case RequestFor.Field      :
 						{
@@ -1033,7 +1030,7 @@ namespace LinqToDB.Linq.Builder
 								return IsExpressionResult.False;
 
 							return contextInfo.Context.IsExpression(contextInfo.CurrentExpression,
-								contextInfo.CurrentLevel + 1, requestFor);
+								contextInfo.CurrentLevel + 1, requestFlag);
 						}
 
 					case RequestFor.Table       :
@@ -1058,7 +1055,7 @@ namespace LinqToDB.Linq.Builder
 								return new IsExpressionResult(true, contextInfo.Context);
 
 							return contextInfo.Context.IsExpression(contextInfo.CurrentExpression,
-								contextInfo.CurrentLevel + 1, requestFor);
+								contextInfo.CurrentLevel + 1, requestFlag);
 
 						}
 

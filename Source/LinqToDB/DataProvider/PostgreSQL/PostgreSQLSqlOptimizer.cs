@@ -10,11 +10,13 @@
 		{
 		}
 
-		public override SqlStatement Finalize(SqlStatement statement, bool inlineParameters)
+		public override bool CanCompareSearchConditions => true;
+
+		public override SqlStatement Finalize(SqlStatement statement)
 		{
 			CheckAliases(statement, int.MaxValue);
 
-			return base.Finalize(statement, inlineParameters);
+			return base.Finalize(statement);
 		}
 
 		public override SqlStatement TransformStatement(SqlStatement statement)
@@ -27,26 +29,27 @@
 			};
 		}
 
-		public override ISqlExpression ConvertExpression(ISqlExpression expr, bool withParameters)
+		public override ISqlExpression ConvertExpressionImpl(ISqlExpression expression, ConvertVisitor visitor,
+			EvaluationContext context)
 		{
-			expr = base.ConvertExpression(expr, withParameters);
+			expression = base.ConvertExpressionImpl(expression, visitor, context);
 
-			if (expr is SqlBinaryExpression be)
+			if (expression is SqlBinaryExpression be)
 			{
 				switch (be.Operation)
 				{
 					case "^": return new SqlBinaryExpression(be.SystemType, be.Expr1, "#", be.Expr2);
-					case "+": return be.SystemType == typeof(string) ? new SqlBinaryExpression(be.SystemType, be.Expr1, "||", be.Expr2, be.Precedence) : expr;
+					case "+": return be.SystemType == typeof(string) ? new SqlBinaryExpression(be.SystemType, be.Expr1, "||", be.Expr2, be.Precedence) : expression;
 				}
 			}
-			else if (expr is SqlFunction func)
+			else if (expression is SqlFunction func)
 			{
 				switch (func.Name)
 				{
 					case "Convert"   :
 						if (func.SystemType.ToUnderlying() == typeof(bool))
 						{
-							var ex = AlternativeConvertToBoolean(func, 1, withParameters);
+							var ex = AlternativeConvertToBoolean(func, 1);
 							if (ex != null)
 								return ex;
 						}
@@ -63,18 +66,17 @@
 							: Add<int>(
 								new SqlExpression(func.SystemType, "Position({0} in {1})", Precedence.Primary,
 									func.Parameters[0],
-									ConvertExpression(new SqlFunction(typeof(string), "Substring",
+									ConvertExpressionImpl(new SqlFunction(typeof(string), "Substring",
 										func.Parameters[1],
 										func.Parameters[2],
 										Sub<int>(
-											ConvertExpression(
-												new SqlFunction(typeof(int), "Length", func.Parameters[1]),
-												withParameters), func.Parameters[2])), withParameters)),
+											ConvertExpressionImpl(
+												new SqlFunction(typeof(int), "Length", func.Parameters[1]), visitor, context), func.Parameters[2])), visitor, context)),
 								Sub(func.Parameters[2], 1));
 				}
 			}
 
-			return expr;
+			return expression;
 		}
 
 	}

@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Data.Common;
-using System.IO;
 using System.Reflection;
-
 using NUnit.Framework;
+
+#if !NET472
+using System.IO;
+#endif
 
 using Tests;
 
@@ -17,6 +19,10 @@ public class TestsInitialization
 	[OneTimeSetUp]
 	public void TestAssemblySetup()
 	{
+		// uncomment it to run tests with SeqentialAccess command behavior
+		//LinqToDB.Common.Configuration.OptimizeForSequentialAccess = true;
+		//DbCommandProcessorExtensions.Instance = new SequentialAccessCommandProcessor();
+
 		// netcoreapp2.1 adds DbProviderFactories support, but providers should be registered by application itself
 		// this code allows to load assembly using factory without adding explicit reference to project
 		RegisterSapHanaFactory();
@@ -45,6 +51,9 @@ public class TestsInitialization
 		// register test providers
 		TestNoopProvider.Init();
 		SQLiteMiniprofilerProvider.Init();
+
+		// uncomment to run FEC for all tests and comment reset line in TestBase.OnAfterTest
+		//LinqToDB.Common.Compilation.SetExpressionCompiler(_ => FastExpressionCompiler.ExpressionCompiler.CompileFast(_, true));
 	}
 
 	private void RegisterSapHanaFactory()

@@ -7,7 +7,6 @@ using NUnit.Framework;
 
 namespace Tests.Linq
 {
-	using LinqToDB.Common;
 	using LinqToDB.Linq;
 	using LinqToDB.Mapping;
 	using Model;
@@ -2059,13 +2058,6 @@ namespace Tests.Linq
 			}
 		}
 
-		// check why firebird and access fails on generated sql
-		// FirebirdSql.Data.Common.IscException : arithmetic exception, numeric overflow, or string truncation string right truncation
-		//
-		// OleDbException : IErrorInfo.GetDescription failed with E_FAIL(0x80004005).
-		// Access issue could be related to reserved words but I don't see anything suspicious in failed query
-		// https://support.microsoft.com/en-us/office/learn-about-access-reserved-words-and-symbols-ae9d9ada-3255-4b12-91a9-f855bdd9c5a2?ocmsassetid=ha010030643&correlationid=13c0f607-b794-4387-b8d9-bdffce04d996&ui=en-us&rs=en-us&ad=us
-		[ActiveIssue(Configurations = new[] { TestProvName.AllFirebird, TestProvName.AllAccess })]
 		[Test]
 		public void Issue434Test1([DataSources] string context)
 		{
@@ -2295,6 +2287,24 @@ namespace Tests.Linq
 					.Select(_ => _.Count)
 					.Where(_ => _ > 1)
 					.Count();
+			}
+		}
+
+		[Test]
+		public void GroupByWithSubquery([DataSources] string context)
+		{
+			using (var db = GetDataContext(context))
+			{
+				var emptyEquery = db.Person
+					.Select(_ => 1)
+					.Where(_ => false);
+
+				var query = emptyEquery
+					.GroupBy(_ => _)
+					.Select(_ => new { _.Key, Count = _.Count() })
+					.ToList();
+
+				Assert.AreEqual(0, query.Count);
 			}
 		}
 	}

@@ -29,18 +29,18 @@ namespace LinqToDB.DataProvider.Oracle
 			return base.GetSchema(dataConnection, options);
 		}
 
-		protected override string GetDataSourceName(DataConnection dataConnection)
+		protected override string GetDataSourceName(DataConnection dbConnection)
 		{
-			var connection = _provider.TryGetProviderConnection(dataConnection.Connection, dataConnection.MappingSchema);
+			var connection = _provider.TryGetProviderConnection(dbConnection.Connection, dbConnection.MappingSchema);
 			if (connection == null)
 				return string.Empty;
 
 			return _provider.Adapter.GetHostName(connection);
 		}
 
-		protected override string GetDatabaseName(DataConnection dataConnection)
+		protected override string GetDatabaseName(DataConnection dbConnection)
 		{
-			var connection = _provider.TryGetProviderConnection(dataConnection.Connection, dataConnection.MappingSchema);
+			var connection = _provider.TryGetProviderConnection(dbConnection.Connection, dbConnection.MappingSchema);
 			if (connection == null)
 				return string.Empty;
 
@@ -227,16 +227,22 @@ namespace LinqToDB.DataProvider.Oracle
 
 			return dataConnection.Query(rd =>
 			{
+				// IMPORTANT: reader calls must be ordered to support SequentialAccess
+				var tableId    = rd.GetString(0);
+				var name       = rd.GetString(1);
 				var dataType   = rd.IsDBNull(2) ?       null : rd.GetString(2);
+				var isNullable = rd.GetInt32(3) != 0;
+				var ordinal    = rd.IsDBNull(4) ? 0 : rd.GetInt32(4);
 				var dataLength = rd.IsDBNull(5) ? (int?)null : rd.GetInt32(5);
 				var charLength = rd.IsDBNull(6) ? (int?)null : rd.GetInt32(6);
+
 				return new ColumnInfo
 				{
-					TableID     = rd.GetString(0),
-					Name        = rd.GetString(1),
-					DataType    = rd.IsDBNull(2) ? null : rd.GetString(2),
-					IsNullable  = rd.GetInt32(3) != 0,
-					Ordinal     = rd.IsDBNull(4) ? 0 : rd.GetInt32(4),
+					TableID     = tableId,
+					Name        = name,
+					DataType    = dataType,
+					IsNullable  = isNullable,
+					Ordinal     = ordinal,
 					Precision   = rd.IsDBNull(7) ? (int?)null : rd.GetInt32(7),
 					Scale       = rd.IsDBNull(8) ? (int?)null : rd.GetInt32(8),
 					IsIdentity  = rd.GetInt32(9) != 0,
@@ -375,16 +381,16 @@ namespace LinqToDB.DataProvider.Oracle
 			).ToList();
 		}
 
-		protected override string? GetDbType(GetSchemaOptions options, string? columnType, DataTypeInfo? dataType, long? length, int? prec, int? scale, string? udtCatalog, string? udtSchema, string? udtName)
+		protected override string? GetDbType(GetSchemaOptions options, string? columnType, DataTypeInfo? dataType, long? length, int? precision, int? scale, string? udtCatalog, string? udtSchema, string? udtName)
 		{
 			switch (columnType)
 			{
 				case "NUMBER" :
-					if (prec == 0) return columnType;
+					if (precision == 0) return columnType;
 					break;
 			}
 
-			return base.GetDbType(options, columnType, dataType, length, prec, scale, udtCatalog, udtSchema, udtName);
+			return base.GetDbType(options, columnType, dataType, length, precision, scale, udtCatalog, udtSchema, udtName);
 		}
 
 		protected override Type? GetSystemType(string? dataType, string? columnType, DataTypeInfo? dataTypeInfo, long? length, int? precision, int? scale, GetSchemaOptions options)

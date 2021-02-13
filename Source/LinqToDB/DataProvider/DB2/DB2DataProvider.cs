@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Threading;
@@ -29,7 +29,7 @@ namespace LinqToDB.DataProvider.DB2
 			SqlProviderFlags.IsCommonTableExpressionsSupported = true;
 			SqlProviderFlags.IsUpdateFromSupported             = false;
 
-			SetCharFieldToType<char>("CHAR", (r, i) => DataTools.GetChar(r, i));
+			SetCharFieldToType<char>("CHAR", DataTools.GetCharExpression);
 			SetCharField            ("CHAR", (r, i) => r.GetString(i).TrimEnd(' '));
 
 			_sqlOptimizer = new DB2SqlOptimizer(SqlProviderFlags);

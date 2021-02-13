@@ -6,6 +6,7 @@ using System.Reflection;
 namespace LinqToDB.DataProvider.SqlServer
 {
 	using System.Collections.Concurrent;
+	using System.Linq.Expressions;
 	using System.Text;
 	using Common;
 	using Configuration;
@@ -143,14 +144,14 @@ namespace LinqToDB.DataProvider.SqlServer
 
 		internal static StringBuilder QuoteIdentifier(StringBuilder sb, string identifier)
 		{
-			sb.Append("[");
+			sb.Append('[');
 
 			if (identifier.Contains("]"))
 				sb.Append(identifier.Replace("]", "]]"));
 			else
 				sb.Append(identifier);
 
-			sb.Append("]");
+			sb.Append(']');
 
 			return sb;
 		}
@@ -368,7 +369,9 @@ namespace LinqToDB.DataProvider.SqlServer
 			public const string OptionRecompile = "OPTION(RECOMPILE)";
 		}
 
+		[Obsolete("This field is not used by linq2db. Configure reader expressions on DataProvider directly")]
 		public static Func<IDataReader,int,decimal> DataReaderGetMoney   = (dr, i) => dr.GetDecimal(i);
+		[Obsolete("This field is not used by linq2db. Configure reader expressions on DataProvider directly")]
 		public static Func<IDataReader,int,decimal> DataReaderGetDecimal = (dr, i) => dr.GetDecimal(i);
 	}
 }

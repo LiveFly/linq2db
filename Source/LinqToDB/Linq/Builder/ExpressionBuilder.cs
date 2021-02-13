@@ -34,6 +34,7 @@ namespace LinqToDB.Linq.Builder
 			new OrderByBuilder             (),
 			new RemoveOrderByBuilder       (),
 			new GroupByBuilder             (),
+			new GroupByElementBuilder      (),
 			new JoinBuilder                (),
 			new AllJoinsBuilder            (),
 			new AllJoinsLinqBuilder        (),
@@ -381,8 +382,6 @@ namespace LinqToDB.Linq.Builder
 
 			_optimizedExpressions[expression] = expr;
 
-			_optimizationContext.RelocateAlias(expression, expr);
-
 			return expr;
 		}
 
@@ -489,7 +488,6 @@ namespace LinqToDB.Linq.Builder
 						if (l != null)
 						{
 							var optimized = OptimizeExpression(ConvertMethod(call, l));
-							_optimizationContext.RegisterAlias(optimized, alias!);
 							return new TransformInfo(optimized);
 						}
 
@@ -961,7 +959,7 @@ namespace LinqToDB.Linq.Builder
 			var helper =
 				//Expression.Lambda<Func<IGroupByHelper>>(
 				//	Expression.Convert(Expression.New(gtype), typeof(IGroupByHelper)))
-				//.Compile()();
+				//.CompileExpression()();
 				(IGroupByHelper)Activator.CreateInstance(gtype)!;
 
 			helper.Set(needSubQuery, sourceExpression, keySelector, elementSelector, resultSelector);
@@ -1089,7 +1087,7 @@ namespace LinqToDB.Linq.Builder
 			var helper =
 				//Expression.Lambda<Func<ISelectManyHelper>>(
 				//	Expression.Convert(Expression.New(gtype), typeof(ISelectManyHelper)))
-				//.Compile()();
+				//.CompileExpression()();
 				(ISelectManyHelper)Activator.CreateInstance(gtype)!;
 
 			helper.Set(sourceExpression, colSelector);

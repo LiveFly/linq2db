@@ -48,6 +48,12 @@ namespace LinqToDB.SqlQuery
 					break;
 				}
 
+				case QueryElementType.SqlObjectExpression:
+				{
+					Visit1X((SqlObjectExpression)element);
+					break;
+				}
+
 				case QueryElementType.SqlBinaryExpression:
 					{
 						Visit1(((SqlBinaryExpression)element).Expr1);
@@ -134,6 +140,13 @@ namespace LinqToDB.SqlQuery
 						Visit1(((SqlPredicate.Like)element).Expr1);
 						Visit1(((SqlPredicate.Like)element).Expr2);
 						Visit1(((SqlPredicate.Like)element).Escape);
+						break;
+					}
+
+				case QueryElementType.SearchStringPredicate:
+					{
+						Visit1(((SqlPredicate.SearchString)element).Expr1);
+						Visit1(((SqlPredicate.SearchString)element).Expr2);
 						break;
 					}
 
@@ -517,6 +530,11 @@ namespace LinqToDB.SqlQuery
 			foreach (var v in element.Parameters) Visit1(v);
 		}
 
+		void Visit1X(SqlObjectExpression element)
+		{
+			foreach (var v in element.InfoParameters) Visit1(v.Sql);
+		}
+
 		void Visit1X(SqlFunction element)
 		{
 			foreach (var p in element.Parameters) Visit1(p);
@@ -594,6 +612,12 @@ namespace LinqToDB.SqlQuery
 						Visit2X((SqlExpression)element);
 						break;
 					}
+
+				case QueryElementType.SqlObjectExpression:
+				{
+					Visit2X((SqlObjectExpression)element);
+					break;
+				}
 
 				case QueryElementType.SqlBinaryExpression:
 					{
@@ -685,6 +709,13 @@ namespace LinqToDB.SqlQuery
 						Visit2(((SqlPredicate.Like)element).Expr1);
 						Visit2(((SqlPredicate.Like)element).Expr2);
 						Visit2(((SqlPredicate.Like)element).Escape);
+						break;
+					}
+
+				case QueryElementType.SearchStringPredicate:
+					{
+						Visit2(((SqlPredicate.SearchString)element).Expr1);
+						Visit2(((SqlPredicate.SearchString)element).Expr2);
 						break;
 					}
 
@@ -1104,6 +1135,11 @@ namespace LinqToDB.SqlQuery
 			foreach (var v in element.Parameters) Visit2(v);
 		}
 
+		void Visit2X(SqlObjectExpression element)
+		{
+			foreach (var v in element.InfoParameters) Visit2(v.Sql);
+		}
+
 		void Visit2X(SqlFunction element)
 		{
 			foreach (var p in element.Parameters) Visit2(p);
@@ -1167,6 +1203,18 @@ namespace LinqToDB.SqlQuery
 			return null;
 		}
 
+		IQueryElement? FindX(SqlObjectExpression oe)
+		{
+			foreach (var item in oe.InfoParameters)
+			{
+				var e = Find(item.Sql);
+				if (e != null)
+					return e;
+			}
+
+			return null;
+		}
+
 		IQueryElement? FindX(SqlSearchCondition sc)
 		{
 			if (sc.Conditions == null)
@@ -1199,22 +1247,23 @@ namespace LinqToDB.SqlQuery
 
 			switch (element.ElementType)
 			{
-				case QueryElementType.SqlFunction       : return Find(((SqlFunction)          element).Parameters     );
-				case QueryElementType.SqlExpression     : return Find(((SqlExpression)        element).Parameters     );
-				case QueryElementType.Column            : return Find(((SqlColumn)            element).Expression     );
-				case QueryElementType.SearchCondition   : return FindX((SqlSearchCondition)   element                 );
-				case QueryElementType.Condition         : return Find(((SqlCondition)         element).Predicate      );
-				case QueryElementType.ExprPredicate     : return Find(((SqlPredicate.Expr)    element).Expr1          );
-				case QueryElementType.NotExprPredicate  : return Find(((SqlPredicate.NotExpr) element).Expr1          );
-				case QueryElementType.IsNullPredicate   : return Find(((SqlPredicate.IsNull)  element).Expr1          );
-				case QueryElementType.FromClause        : return Find(((SqlFromClause)        element).Tables         );
-				case QueryElementType.WhereClause       : return Find(((SqlWhereClause)       element).SearchCondition);
-				case QueryElementType.GroupByClause     : return Find(((SqlGroupByClause)     element).Items          );
-				case QueryElementType.GroupingSet       : return Find(((SqlGroupingSet)       element).Items          );
-				case QueryElementType.OrderByClause     : return Find(((SqlOrderByClause)     element).Items          );
-				case QueryElementType.OrderByItem       : return Find(((SqlOrderByItem)       element).Expression     );
-				case QueryElementType.SetOperator       : return Find(((SqlSetOperator)       element).SelectQuery    );
-				case QueryElementType.FuncLikePredicate : return Find(((SqlPredicate.FuncLike)element).Function       );
+				case QueryElementType.SqlFunction         : return Find(((SqlFunction)          element).Parameters     );
+				case QueryElementType.SqlExpression       : return Find(((SqlExpression)        element).Parameters     );
+				case QueryElementType.SqlObjectExpression : return FindX(((SqlObjectExpression) element)                );
+				case QueryElementType.Column              : return Find(((SqlColumn)            element).Expression     );
+				case QueryElementType.SearchCondition     : return FindX((SqlSearchCondition)   element                 );
+				case QueryElementType.Condition           : return Find(((SqlCondition)         element).Predicate      );
+				case QueryElementType.ExprPredicate       : return Find(((SqlPredicate.Expr)    element).Expr1          );
+				case QueryElementType.NotExprPredicate    : return Find(((SqlPredicate.NotExpr) element).Expr1          );
+				case QueryElementType.IsNullPredicate     : return Find(((SqlPredicate.IsNull)  element).Expr1          );
+				case QueryElementType.FromClause          : return Find(((SqlFromClause)        element).Tables         );
+				case QueryElementType.WhereClause         : return Find(((SqlWhereClause)       element).SearchCondition);
+				case QueryElementType.GroupByClause       : return Find(((SqlGroupByClause)     element).Items          );
+				case QueryElementType.GroupingSet         : return Find(((SqlGroupingSet)       element).Items          );
+				case QueryElementType.OrderByClause       : return Find(((SqlOrderByClause)     element).Items          );
+				case QueryElementType.OrderByItem         : return Find(((SqlOrderByItem)       element).Expression     );
+				case QueryElementType.SetOperator         : return Find(((SqlSetOperator)       element).SelectQuery    );
+				case QueryElementType.FuncLikePredicate   : return Find(((SqlPredicate.FuncLike)element).Function       );
 
 				case QueryElementType.IsTruePredicate:
 					{
@@ -1293,6 +1342,13 @@ namespace LinqToDB.SqlQuery
 							Find(((SqlPredicate.Like)element).Expr1 ) ??
 							Find(((SqlPredicate.Like)element).Expr2 ) ??
 							Find(((SqlPredicate.Like)element).Escape);
+					}
+
+				case QueryElementType.SearchStringPredicate:
+					{
+						return
+							Find(((SqlPredicate.SearchString)element).Expr1 ) ??
+							Find(((SqlPredicate.SearchString)element).Expr2 );
 					}
 
 				case QueryElementType.BetweenPredicate:

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Data.Linq;
 using System.Data.SqlTypes;
 using System.IO;
@@ -85,13 +85,13 @@ namespace LinqToDB.DataProvider.SqlServer
 				var p = Expression.Parameter(@from);
 
 				return Expression.Lambda(
-					Expression.Call(to, "Parse", new Type[0],
+					Expression.Call(to, "Parse", Array<Type>.Empty,
 						Expression.New(
 							MemberHelper.ConstructorOf(() => new SqlString("")),
 							Expression.Call(
 								Expression.Convert(p, typeof(object)),
 								"ToString",
-								new Type[0]))),
+								Array<Type>.Empty))),
 					p);
 			}
 
@@ -148,14 +148,14 @@ namespace LinqToDB.DataProvider.SqlServer
 		internal static void ConvertDateTimeToSql(StringBuilder stringBuilder, SqlDataType? dt, DateTime value)
 		{
 			var format =
-				value.Millisecond == 0
-					? "yyyy-MM-ddTHH:mm:ss"
-					: dt == null || dt.Type.DataType != DataType.DateTime2
-						? "yyyy-MM-ddTHH:mm:ss.fff"
-						: dt.Type.Precision == 0
-							? "yyyy-MM-ddTHH:mm:ss"
-							: "yyyy-MM-ddTHH:mm:ss." + new string('f', dt.Type.Precision ?? 7);
-
+				dt?.Type.DataType == DataType.DateTime2
+					? dt.Type.Precision == 0
+						  ? "yyyy-MM-ddTHH:mm:ss"
+						  : "yyyy-MM-ddTHH:mm:ss." + new string('f', dt.Type.Precision ?? 7)
+					: value.Millisecond == 0
+						? "yyyy-MM-ddTHH:mm:ss"
+						: "yyyy-MM-ddTHH:mm:ss.fff";
+			
 			stringBuilder
 				.Append('\'')
 				.Append(value.ToString(format))
@@ -209,10 +209,9 @@ namespace LinqToDB.DataProvider.SqlServer
 		static void ConvertBinaryToSql(StringBuilder stringBuilder, byte[] value)
 		{
 			stringBuilder.Append("0x");
-
-			foreach (var b in value)
-				stringBuilder.Append(b.ToString("X2"));
+			stringBuilder.AppendByteArrayAsHexViaLookup32(value);
 		}
+		
 	}
 
 	public class SqlServer2000MappingSchema : MappingSchema

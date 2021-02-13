@@ -8,8 +8,8 @@ namespace LinqToDB.DataProvider.MySql
 {
 	using Extensions;
 	using Mapping;
-	using SqlQuery;
 	using SqlProvider;
+	using SqlQuery;
 	using Tools;
 
 	class MySqlSqlBuilder : BasicSqlBuilder
@@ -150,7 +150,7 @@ namespace LinqToDB.DataProvider.MySql
 							StringBuilder.Append("BINARY");
 						else
 							StringBuilder.Append($"BINARY({type.Type.Length})");
-						break;
+					break;
 					default                     : base.BuildDataTypeFromDataType(type, forCreateTable); break;
 				}
 
@@ -416,13 +416,12 @@ namespace LinqToDB.DataProvider.MySql
 			return sb.Append(value);
 		}
 
-		protected override StringBuilder BuildExpression(
-			ISqlExpression expr,
-			bool           buildTableName,
-			bool           checkParentheses,
-			string?        alias,
-			ref bool       addAlias,
-			bool           throwExceptionIfTableNotFound = true)
+		protected override StringBuilder BuildExpression(ISqlExpression expr,
+			bool buildTableName,
+			bool checkParentheses,
+			string? alias,
+			ref bool addAlias,
+			bool throwExceptionIfTableNotFound = true)
 		{
 			return base.BuildExpression(
 				expr,
@@ -490,7 +489,7 @@ namespace LinqToDB.DataProvider.MySql
 			AppendIndent();
 			StringBuilder.Append("CONSTRAINT ").Append(pkName).Append(" PRIMARY KEY CLUSTERED (");
 			StringBuilder.Append(string.Join(InlineComma, fieldNames));
-			StringBuilder.Append(")");
+			StringBuilder.Append(')');
 		}
 
 		public override StringBuilder BuildTableName(StringBuilder sb, string? server, string? database, string? schema, string table, TableOptions tableOptions)
@@ -498,7 +497,7 @@ namespace LinqToDB.DataProvider.MySql
 			if (database != null && database.Length == 0) database = null;
 
 			if (database != null)
-				sb.Append(database).Append(".");
+				sb.Append(database).Append('.');
 
 			return sb.Append(table);
 		}
@@ -572,7 +571,7 @@ namespace LinqToDB.DataProvider.MySql
 					StringBuilder.Append("WITH CUBE");
 					break;
 				default:
-					throw new ArgumentOutOfRangeException();
+					throw new InvalidOperationException($"Unexpected grouping type: {groupingType}");
 			}
 		}
 

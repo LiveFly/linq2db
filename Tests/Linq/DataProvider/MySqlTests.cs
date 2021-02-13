@@ -198,15 +198,15 @@ namespace Tests.DataProvider
 
 			using (var conn = new DataConnection(context))
 			{
-				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.Binary   ("p", arr1)),             Is.EqualTo(arr1));
-				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.VarBinary("p", arr1)),             Is.EqualTo(arr1));
-				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.Create   ("p", arr1)),             Is.EqualTo(arr1));
-				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.VarBinary("p", null)),             Is.EqualTo(null));
-				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.VarBinary("p", new byte[0])),      Is.EqualTo(new byte[0]));
-				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.Image    ("p", new byte[0])),      Is.EqualTo(new byte[0]));
-				Assert.That(conn.Execute<byte[]>("SELECT @p", new DataParameter { Name = "p", Value = arr1 }), Is.EqualTo(arr1));
-				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.Create   ("p", new Binary(arr1))), Is.EqualTo(arr1));
-				Assert.That(conn.Execute<byte[]>("SELECT @p", new DataParameter("p", new Binary(arr1))),       Is.EqualTo(arr1));
+				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.Binary   ("p", arr1)),              Is.EqualTo(arr1));
+				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.VarBinary("p", arr1)),              Is.EqualTo(arr1));
+				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.Create   ("p", arr1)),              Is.EqualTo(arr1));
+				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.VarBinary("p", null)),              Is.EqualTo(null));
+				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.VarBinary("p", Array<byte>.Empty)), Is.EqualTo(Array<byte>.Empty));
+				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.Image    ("p", Array<byte>.Empty)), Is.EqualTo(Array<byte>.Empty));
+				Assert.That(conn.Execute<byte[]>("SELECT @p", new DataParameter { Name = "p", Value = arr1 }),  Is.EqualTo(arr1));
+				Assert.That(conn.Execute<byte[]>("SELECT @p", DataParameter.Create   ("p", new Binary(arr1))),  Is.EqualTo(arr1));
+				Assert.That(conn.Execute<byte[]>("SELECT @p", new DataParameter("p", new Binary(arr1))),        Is.EqualTo(arr1));
 			}
 		}
 
@@ -361,7 +361,7 @@ namespace Tests.DataProvider
 
 						// compare only 10 records
 						// as we don't compare all, we must ensure we inserted all records
-						Assert.AreEqual(source.Count(), result.Count());
+						Assert.AreEqual(source.Count, result.Count());
 						AreEqual(source.Take(10), result.Take(10), ComparerBuilder.GetEqualityComparer<AllTypeBaseProviderSpecific>());
 					}
 					else
@@ -373,7 +373,7 @@ namespace Tests.DataProvider
 
 						// compare only 10 records
 						// as we don't compare all, we must ensure we inserted all records
-						Assert.AreEqual(source.Count(), result.Count());
+						Assert.AreEqual(source.Count, result.Count());
 						AreEqual(source.Take(10), result.Take(10), ComparerBuilder.GetEqualityComparer<AllType>());
 					}
 				}
@@ -447,7 +447,7 @@ namespace Tests.DataProvider
 
 						// compare only 10 records
 						// as we don't compare all, we must ensure we inserted all records
-						Assert.AreEqual(source.Count(), result.Count());
+						Assert.AreEqual(source.Count, result.Count());
 						AreEqual(source.Take(10), result.Take(10), ComparerBuilder.GetEqualityComparer<AllTypeBaseProviderSpecific>());
 					}
 					else
@@ -459,7 +459,7 @@ namespace Tests.DataProvider
 
 						// compare only 10 records
 						// as we don't compare all, we must ensure we inserted all records
-						Assert.AreEqual(source.Count(), result.Count());
+						Assert.AreEqual(source.Count, result.Count());
 						AreEqual(source.Take(10), result.Take(10), ComparerBuilder.GetEqualityComparer<AllType>());
 					}
 				}
@@ -1064,6 +1064,7 @@ namespace Tests.DataProvider
 			// TODO: add aggregate/udf functions test cases
 			using (var db = (DataConnection)GetDataContext(context))
 			{
+
 				var expectedProc = testCase.Schema;
 				expectedProc.CatalogName = TestUtils.GetDatabaseName(db);
 
@@ -1082,8 +1083,7 @@ namespace Tests.DataProvider
 				Assert.AreEqual(expectedProc.IsAggregateFunction,   procedure.IsAggregateFunction);
 				Assert.AreEqual(expectedProc.IsDefaultSchema,       procedure.IsDefaultSchema);
 
-				if (GetProviderName(context, out var _) == ProviderName.MySqlConnector
-					&& procedure.ResultException != null)
+				if (GetProviderName(context, out _) == ProviderName.MySqlConnector && procedure.ResultException != null)
 				{
 					Assert.False       (procedure.IsLoaded);
 					Assert.IsInstanceOf(typeof(InvalidOperationException), procedure.ResultException);

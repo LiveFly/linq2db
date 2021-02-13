@@ -23,7 +23,7 @@ jobs:
     inputs:
       solution: '$(solution)'
       configuration: '$(build_configuration)'
-      msbuildArguments: '/t:Restore;Rebuild -m'
+      msbuildArguments: '/t:Restore;Rebuild -m /p:ContinuousIntegrationBuild=true'
     displayName: Build Solution
 
   - task: DotNetCoreCLI@2
@@ -142,6 +142,12 @@ jobs:
       path: '$(Build.SourcesDirectory)/Tests/Linq/bin/$(build_configuration)/net472'
       artifact: '$(netfx472_tests)'
     displayName: Publish test artifacts for NETFX472
+
+  - task: PublishPipelineArtifact@1
+    inputs:
+      path: '$(Build.SourcesDirectory)/Tests/Tests.T4/bin/$(build_configuration)/net472'
+      artifact: '$(netfx472_tests_t4)'
+    displayName: Publish T4 test artifacts for NETFX472
 
   - task: PublishPipelineArtifact@1
     inputs:
